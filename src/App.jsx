@@ -23,6 +23,7 @@ import AlertsPage from './app/pages/AlertsPage';
 import SettingsPage from './app/pages/SettingsPage';
 import AuthCallbackPage from './app/pages/AuthCallbackPage';
 import ProtectedRoute from './app/components/common/ProtectedRoute';
+import { useThemeStore } from './app/stores/themeStore';
 import { useAuthStore } from './app/stores/authStore';
 
 const queryClient = new QueryClient({
@@ -36,6 +37,7 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  const theme = useThemeStore((state) => state.theme);
   useEffect(() => {
     useAuthStore.getState().initialize();
   }, []);
@@ -95,7 +97,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
-      <Toaster theme="dark" position="top-right" richColors />
+      <Toaster theme={theme} position="top-right" richColors />
     </QueryClientProvider>
   );
 }

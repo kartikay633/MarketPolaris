@@ -30,7 +30,7 @@ export function MarketBreadthBar({ breadth }) {
       {/* Top Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isBullish ? '#10B981' : '#F43F5E', boxShadow: `0 0 10px ${isBullish ? '#10B981' : '#F43F5E'}` }} />
+          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isBullish ? '#10B981' : '#F43F5E', boxShadow: 'none' }} />
           <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
             NSE Market Breadth & Participation
           </span>
@@ -54,7 +54,7 @@ export function MarketBreadthBar({ breadth }) {
       </div>
 
       {/* 3 Metric Tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '10px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: '10px' }}>
         {/* Advancing Tile */}
         <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.20)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
@@ -78,7 +78,7 @@ export function MarketBreadthBar({ breadth }) {
         </div>
 
         {/* Unchanged Tile */}
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(255, 255, 255, 0.03)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--card-hover)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
             <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Unchanged</div>
             <div className="num-tabular" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
@@ -95,7 +95,7 @@ export function MarketBreadthBar({ breadth }) {
           width: '100%',
           height: '8px',
           borderRadius: '4px',
-          backgroundColor: 'rgba(255, 255, 255, 0.06)',
+          backgroundColor: 'var(--card-hover)',
           display: 'flex',
           overflow: 'hidden',
           gap: '2px',
@@ -104,9 +104,9 @@ export function MarketBreadthBar({ breadth }) {
         <div
           style={{
             width: `${advPct}%`,
-            background: 'linear-gradient(90deg, #059669, #10B981)',
+            background: 'var(--positive)',
             borderRadius: '4px 0 0 4px',
-            boxShadow: '0 0 10px rgba(16, 185, 129, 0.5)',
+            boxShadow: 'none',
             transition: 'width 0.4s ease',
           }}
           title={`Advancing: ${advancing} (${advPct}%)`}
@@ -122,9 +122,9 @@ export function MarketBreadthBar({ breadth }) {
         <div
           style={{
             width: `${decPct}%`,
-            background: 'linear-gradient(90deg, #F43F5E, #E11D48)',
+            background: 'var(--negative)',
             borderRadius: '0 4px 4px 0',
-            boxShadow: '0 0 10px rgba(244, 63, 94, 0.5)',
+            boxShadow: 'none',
             transition: 'width 0.4s ease',
           }}
           title={`Declining: ${declining} (${decPct}%)`}

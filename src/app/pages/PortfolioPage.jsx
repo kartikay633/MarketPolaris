@@ -40,12 +40,12 @@ export default function PortfolioPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-wide">
+      <div className="page-container-wide portfolio-page">
         {/* Page Header */}
         <div className="page-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <h1 className="page-title">Virtual Portfolio & Account</h1>
+              <h1 className="page-title">Portfolio</h1>
               <span className="badge">BASE CAPITAL ₹10,00,000</span>
             </div>
             <p className="page-subtitle">
@@ -96,11 +96,11 @@ export default function PortfolioPage() {
 
         {/* 4 Summary Metric Hero Cards */}
         {isLoading ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px', marginBottom: '20px' }}>
             <CardSkeleton /><CardSkeleton /><CardSkeleton /><CardSkeleton />
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: '12px', marginBottom: '20px' }}>
             {/* Total Portfolio Value */}
             <div className="stat-card">
               <div className="stat-card-header">

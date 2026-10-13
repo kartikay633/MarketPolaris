@@ -16,7 +16,7 @@ export function SectorBar({ sectors = [] }) {
         </span>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '8px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 190px), 1fr))', gap: '8px' }}>
         {sectors.map((sec) => {
           const isPos = sec.changePercent >= 0;
           const barWidth = Math.min(Math.abs(sec.changePercent) * 25, 100);
@@ -70,15 +70,15 @@ export function SectorBar({ sectors = [] }) {
               {/* Mini Bar Track */}
               <div style={{
                 width: '100%', height: '3px', borderRadius: '2px',
-                backgroundColor: 'rgba(255,255,255,0.07)', overflow: 'hidden',
+                backgroundColor: 'var(--card-hover)', overflow: 'hidden',
               }}>
                 <div style={{
                   height: '100%',
                   width: `${barWidth}%`,
                   background: isPos
-                    ? 'linear-gradient(90deg, #059669, #10B981)'
-                    : 'linear-gradient(90deg, #E11D48, #F43F5E)',
-                  boxShadow: isPos ? '0 0 6px rgba(16,185,129,0.5)' : '0 0 6px rgba(244,63,94,0.5)',
+                    ? 'var(--positive)'
+                    : 'var(--negative)',
+                  boxShadow: 'none',
                   borderRadius: '2px',
                   transition: 'width 0.4s ease',
                 }} />

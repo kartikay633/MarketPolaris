@@ -137,7 +137,7 @@ export function FloatingAIWidget() {
                   borderRadius: '50%',
                   objectFit: 'cover',
                   border: '1.5px solid rgba(59, 130, 246, 0.5)',
-                  boxShadow: '0 0 12px rgba(59, 130, 246, 0.4)',
+                  boxShadow: 'none',
                 }}
               />
               <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -201,7 +201,7 @@ export function FloatingAIWidget() {
                       height: '56px',
                       borderRadius: '50%',
                       margin: '0 auto 10px',
-                      boxShadow: '0 0 24px rgba(59, 130, 246, 0.5)',
+                      boxShadow: 'none',
                       border: '2px solid rgba(59, 130, 246, 0.4)',
                     }}
                   />
@@ -261,7 +261,7 @@ export function FloatingAIWidget() {
                       border: m.role === 'user' ? 'none' : '1px solid var(--border)',
                       fontSize: '12px',
                       lineHeight: 1.5,
-                      boxShadow: m.role === 'user' ? '0 2px 8px rgba(37, 99, 235, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.05)',
+                      boxShadow: 'none',
                     }}
                   >
                     {m.role === 'user' ? (

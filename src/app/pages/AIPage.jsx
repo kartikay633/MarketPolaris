@@ -209,7 +209,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
 
   return (
     <ErrorBoundary>
-      <div style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 56px)', backgroundColor: 'var(--background)', position: 'relative' }}>
+      <div className="ai-page" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 56px)', backgroundColor: 'var(--background)', position: 'relative' }}>
         {/* Top Intelligence Header */}
         <div className="ai-header" style={{ padding: '14px 28px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
@@ -223,7 +223,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                   borderRadius: '50%',
                   objectFit: 'cover',
                   border: '2px solid rgba(59, 130, 246, 0.6)',
-                  boxShadow: '0 0 18px rgba(59, 130, 246, 0.5)',
+                  boxShadow: 'none',
                 }}
               />
               <span
@@ -251,7 +251,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                 <span className="badge badge--accent" style={{ fontSize: '10px' }}>
                   5-YEAR MARKET HISTORY CHECK
                 </span>
-                <span className="badge badge--neutral" style={{ fontSize: '10px', color: '#c084fc', borderColor: 'rgba(168, 85, 247, 0.4)' }}>
+                <span className="badge badge--neutral" style={{ fontSize: '10px', color: 'var(--accent-bright)', borderColor: 'rgba(168, 85, 247, 0.4)' }}>
                   AUTOMATED SAFETY CHECKS
                 </span>
               </div>
@@ -313,7 +313,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
         {/* MODE 1: AUTONOMOUS AGENTIC ALPHA LAB (MULTI-AGENT QUANT & 5-YEAR ML)      */}
         {/* ========================================================================= */}
         {activeMode === 'agentic' && (
-          <div className="page-container-wide" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="page-container-wide ai-page" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
             {/* Strategy Selection & Stock Picker Bar */}
             <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
@@ -351,7 +351,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
               </div>
 
               {/* Preset Cards Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
                 {STRATEGY_PRESETS.map((preset) => {
                   const Icon = preset.icon;
                   const isSelected = selectedStrategy === preset.id;
@@ -426,7 +426,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
 
             {/* Live User-Friendly 5-Year Market Metric Ribbon */}
             {agentResult && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '12px' }}>
+              <div className="ai-metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '12px' }}>
                 <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     5-Year Growth Rate
@@ -461,7 +461,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                   <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                     Big Money Action
                   </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: '#c084fc' }}>
+                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent-bright)' }}>
                     Heavy Buying
                   </span>
                   <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>+₹3,953 Cr institutional buying</span>
@@ -491,7 +491,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
 
             {/* 2-Column Workstation */}
             {agentResult && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '20px', alignItems: 'start' }}>
+              <div className="terminal-panel-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '20px', alignItems: 'start' }}>
                 {/* Left: Interactive Tabs (Summary | 3 Specialists | Chances & Safety) */}
                 <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {/* Tab Selector */}
@@ -551,7 +551,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                         </p>
                       </div>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                         <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}>
                           <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
                             Primary Profit Goal
@@ -670,7 +670,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                             <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Chance of Reaching Profit Target</span>
                             <span style={{ color: 'var(--positive)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{agentResult.mlFactors.target1HitProbability || '78%'} High Probability</span>
                           </div>
-                          <div style={{ height: '10px', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderRadius: '5px', overflow: 'hidden' }}>
+                          <div style={{ height: '10px', backgroundColor: 'var(--card-hover)', borderRadius: '5px', overflow: 'hidden' }}>
                             <div style={{ width: agentResult.mlFactors.target1HitProbability || '78%', height: '100%', backgroundColor: 'var(--positive)', borderRadius: '5px' }} />
                           </div>
                         </div>
@@ -680,7 +680,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                             <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Risk of Dropping to Stop-Loss</span>
                             <span style={{ color: 'var(--negative)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{agentResult.mlFactors.stopLossBreachProbability || '11%'} Low Risk</span>
                           </div>
-                          <div style={{ height: '10px', backgroundColor: 'rgba(255, 255, 255, 0.06)', borderRadius: '5px', overflow: 'hidden' }}>
+                          <div style={{ height: '10px', backgroundColor: 'var(--card-hover)', borderRadius: '5px', overflow: 'hidden' }}>
                             <div style={{ width: agentResult.mlFactors.stopLossBreachProbability || '11%', height: '100%', backgroundColor: 'var(--negative)', borderRadius: '5px' }} />
                           </div>
                         </div>
@@ -705,7 +705,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                   <div
                     className="card card-padded"
                     style={{
-                      background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12) 0%, rgba(37, 99, 235, 0.08) 100%), var(--surface)',
+                      background: 'var(--surface)',
                       border: '1px solid rgba(16, 185, 129, 0.35)',
                       display: 'flex',
                       flexDirection: 'column',
@@ -736,7 +736,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                     </div>
 
                     {/* Target and Stop Loss Levels */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: 'var(--surface)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
+                    <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: 'var(--surface)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                       <div>
                         <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Target 1 (Primary Goal)</div>
                         <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--positive)' }}>
@@ -799,7 +799,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
         {/* MODE 2: CONVERSATIONAL CO-PILOT CHAT DESK                                 */}
         {/* ========================================================================= */}
         {activeMode === 'chat' && (
-          <div style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100vh - 120px)' }}>
+          <div className="ai-chat-desk" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100vh - 120px)' }}>
             {/* Research Message Thread */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '24px', maxWidth: '1000px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
               {messages.map((m) => {
@@ -820,7 +820,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
                           borderRadius: '50%',
                           objectFit: 'cover',
                           border: '1px solid rgba(59, 130, 246, 0.5)',
-                          boxShadow: '0 0 10px rgba(59, 130, 246, 0.4)',
+                          boxShadow: 'none',
                           marginTop: '2px',
                           flexShrink: 0,
                         }}
@@ -865,7 +865,7 @@ Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audi
             </div>
 
             {/* Suggestion Chips */}
-            <div style={{ padding: '4px 24px 8px', maxWidth: '1000px', width: '100%', margin: '0 auto', display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'none' }}>
+            <div style={{ padding: '4px 24px 8px', maxWidth: '1000px', width: '100%', margin: '0 auto', display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'thin' }}>
               {SUGGESTIONS.map((s) => (
                 <button
                   key={s}

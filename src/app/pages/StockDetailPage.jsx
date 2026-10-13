@@ -62,9 +62,9 @@ export default function StockDetailPage() {
 
   if (isQuoteLoading) {
     return (
-      <div className="page-container-wide">
+      <div className="page-container-wide stock-detail-page">
         <LoadingSkeleton type="chart" />
-        <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
+        <div className="terminal-pair-grid" style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '16px' }}>
           <LoadingSkeleton type="card" />
           <LoadingSkeleton type="card" />
           <LoadingSkeleton type="card" />
@@ -121,7 +121,7 @@ export default function StockDetailPage() {
   const range52Percent = Math.min(Math.max(((ltp - low52) / (high52 - low52 || 1)) * 100, 0), 100);
 
   return (
-    <div className="page-container-wide">
+    <div className="page-container-wide stock-detail-page">
       {/* Navigation Breadcrumb */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px', fontSize: '12.5px' }}>
         <button
@@ -145,7 +145,7 @@ export default function StockDetailPage() {
           <CompanyLogo
             symbol={(quote.symbol || '').replace('NSE:', '').replace('BSE:', '')}
             size={56}
-            style={{ borderRadius: '10px', boxShadow: '0 4px 16px rgba(0,0,0,0.3)' }}
+            style={{ borderRadius: '10px', boxShadow: 'none' }}
           />
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
@@ -250,7 +250,7 @@ export default function StockDetailPage() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))',
             gap: '12px',
           }}
         >
@@ -331,7 +331,7 @@ export default function StockDetailPage() {
                     backgroundColor: 'var(--text-primary)',
                     border: '2px solid var(--accent)',
                     transform: 'translateX(-50%)',
-                    boxShadow: '0 0 8px var(--accent-glow)',
+                    boxShadow: 'none',
                   }}
                 />
               </div>
@@ -361,7 +361,7 @@ export default function StockDetailPage() {
       </div>
 
       {/* Two Column Section: AI Synthesis & Related News */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: '16px', alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '16px', alignItems: 'start' }}>
         {/* Pulse AI Insights Panel */}
         <AIInsightPanel symbol={quote.symbol} />
 

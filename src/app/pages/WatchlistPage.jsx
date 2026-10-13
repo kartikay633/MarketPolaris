@@ -34,7 +34,7 @@ export default function WatchlistPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-wide">
+      <div className="page-container-wide watchlist-page">
         {/* Page Header */}
         <div className="page-header">
           <div>
@@ -56,7 +56,7 @@ export default function WatchlistPage() {
             gap: '10px',
             padding: '8px 16px',
             borderRadius: 'var(--radius-md)',
-            background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
             backdropFilter: 'blur(12px)',
           }}>
@@ -82,7 +82,7 @@ export default function WatchlistPage() {
           marginBottom: '16px',
           padding: '12px 16px',
           borderRadius: 'var(--radius-md)',
-          background: 'linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.01) 100%)',
+          background: 'var(--surface)',
           border: '1px solid var(--border)',
           backdropFilter: 'blur(12px)',
         }}>
@@ -133,15 +133,15 @@ export default function WatchlistPage() {
         </div>
 
         {/* Watchlist Table */}
-        <div style={{
+        <div className="terminal-table-scroll" style={{
           borderRadius: 'var(--radius-md)',
           border: '1px solid var(--border)',
           background: 'var(--card)',
           overflow: 'hidden',
-          boxShadow: 'var(--shadow-card)',
+          boxShadow: 'none',
         }}>
           {/* Table Header */}
-          <div style={{
+          <div className="terminal-data-row" style={{
             display: 'grid',
             gridTemplateColumns: 'minmax(200px, 2.5fr) minmax(110px, 1fr) minmax(130px, 1fr) minmax(140px, 1fr) minmax(120px, 1fr) 130px',
             padding: '10px 18px',
@@ -200,7 +200,7 @@ export default function WatchlistPage() {
                       borderBottom: idx < items.length - 1 ? '1px solid var(--border-subtle)' : 'none',
                       transition: 'background 0.15s ease',
                     }}
-                    className="watchlist-row"
+                    className="watchlist-row terminal-data-row"
                   >
                     {/* Company Logo + Symbol */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '12px', overflow: 'hidden' }}>

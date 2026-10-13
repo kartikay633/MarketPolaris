@@ -7,7 +7,7 @@ export function IndexCard({ index, onClick }) {
   if (!index) return null;
 
   const isPositive = index.change >= 0;
-  const strokeColor = isPositive ? '#10B981' : '#F43F5E';
+  const strokeColor = isPositive ? 'var(--positive)' : 'var(--negative)';
   const gradId = `spark-${index.symbol || index.name}`.replace(/[^a-zA-Z0-9]/g, '');
 
   // Calculate day range percentage (low to high)
@@ -27,6 +27,9 @@ export function IndexCard({ index, onClick }) {
   return (
     <div
       onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick(event); } } : undefined}
       className={`index-card ${isPositive ? 'index-card--positive' : 'index-card--negative'}`}
       style={{ cursor: onClick ? 'pointer' : 'default', position: 'relative' }}
     >
@@ -38,16 +41,14 @@ export function IndexCard({ index, onClick }) {
           right: '-20px',
           width: '90px',
           height: '90px',
-          background: isPositive 
-            ? 'radial-gradient(circle, rgba(16, 185, 129, 0.20) 0%, transparent 70%)' 
-            : 'radial-gradient(circle, rgba(244, 63, 94, 0.20) 0%, transparent 70%)',
+          background: 'transparent',
           pointerEvents: 'none',
           filter: 'blur(10px)',
         }}
       />
 
       {/* Header: Name & Change Badge */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
+      <div className="index-card-heading" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
         <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em' }}>
           {index.name}
         </span>
@@ -58,9 +59,7 @@ export function IndexCard({ index, onClick }) {
             fontSize: '11px',
             fontWeight: 700,
             borderRadius: 'var(--radius-xs)',
-            boxShadow: isPositive 
-              ? '0 0 10px rgba(16, 185, 129, 0.25)' 
-              : '0 0 10px rgba(244, 63, 94, 0.25)',
+            boxShadow: 'none',
           }}
         >
           {isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
@@ -69,9 +68,9 @@ export function IndexCard({ index, onClick }) {
       </div>
 
       {/* Mid Section: Value & Mini Sparkline Graphic */}
-      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: '12px', position: 'relative', zIndex: 1 }}>
+      <div className="index-card-value" style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: '12px', position: 'relative', zIndex: 1 }}>
         <div>
-          <div className="num-tabular" style={{ fontSize: '24px', fontWeight: 800, color: '#FFFFFF', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
+          <div className="num-tabular" style={{ fontSize: '24px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.02em', lineHeight: 1.1 }}>
             {formatNumber(index.value, 2)}
           </div>
           <div className="num-tabular" style={{ fontSize: '12.5px', fontWeight: 600, color: isPositive ? 'var(--positive-text)' : 'var(--negative-text)', marginTop: '4px' }}>
@@ -80,7 +79,7 @@ export function IndexCard({ index, onClick }) {
         </div>
 
         {/* Mini SVG Sparkline */}
-        <div style={{ width: '85px', height: '32px', opacity: 0.85 }}>
+        <div className="index-card-sparkline" style={{ width: '85px', height: '32px', opacity: 0.85 }}>
           <svg viewBox="0 0 140 32" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
             <defs>
               <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -113,7 +112,7 @@ export function IndexCard({ index, onClick }) {
             style={{ 
               height: '4px', 
               borderRadius: '2px', 
-              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              backgroundColor: 'var(--card-hover)',
               position: 'relative',
               overflow: 'visible',
             }}
@@ -125,9 +124,7 @@ export function IndexCard({ index, onClick }) {
                 width: `${range}%`,
                 backgroundColor: isPositive ? 'var(--positive)' : 'var(--negative)',
                 borderRadius: '2px',
-                boxShadow: isPositive 
-                  ? '0 0 6px rgba(16, 185, 129, 0.6)' 
-                  : '0 0 6px rgba(244, 63, 94, 0.6)',
+                boxShadow: 'none',
               }}
             />
             {/* Glowing pin dot marker */}
@@ -141,7 +138,7 @@ export function IndexCard({ index, onClick }) {
                 borderRadius: '50%',
                 backgroundColor: '#FFFFFF',
                 border: `2px solid ${strokeColor}`,
-                boxShadow: `0 0 8px ${strokeColor}`,
+                boxShadow: 'none',
               }}
             />
           </div>

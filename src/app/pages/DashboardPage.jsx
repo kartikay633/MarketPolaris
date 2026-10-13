@@ -1,4 +1,4 @@
-// ROADMAP: Section 2, 5 & Design Refinement — Institutional Market Terminal Dashboard (Executive Command Cockpit)
+// ROADMAP: Section 2, 5 & Design Refinement — Institutional Market Terminal Dashboard (Market overview)
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
@@ -90,19 +90,19 @@ export default function DashboardPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container">
+      <div className="page-container dashboard-page">
         {/* Terminal Header & Virtual Capital Telemetry */}
         <div 
-          className="card card-padded" 
+          className="dashboard-heading"
           style={{ 
             display: 'flex', 
             flexWrap: 'wrap', 
             alignItems: 'center', 
             justifyContent: 'space-between', 
             gap: '18px',
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.14) 0%, rgba(14, 165, 233, 0.05) 45%, rgba(255, 255, 255, 0.01) 100%), var(--surface)',
+            background: 'var(--surface)',
             borderColor: 'rgba(59, 130, 246, 0.25)',
-            boxShadow: '0 8px 32px -4px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(59, 130, 246, 0.15), inset 0 1px 0 0 rgba(255, 255, 255, 0.10)',
+            boxShadow: 'none',
             position: 'relative',
             overflow: 'hidden'
           }}
@@ -115,7 +115,7 @@ export default function DashboardPage() {
               left: '-20px',
               width: '180px',
               height: '180px',
-              background: 'radial-gradient(circle, rgba(59, 130, 246, 0.28) 0%, transparent 70%)',
+              background: 'transparent',
               pointerEvents: 'none',
               filter: 'blur(20px)',
             }} 
@@ -124,7 +124,7 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
-                Executive Command Cockpit
+                Market overview
               </h1>
               {overview?.status === 'CLOSED' ? (
                 <span className="badge badge--accent" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -140,7 +140,7 @@ export default function DashboardPage() {
               {overview?.status === 'CLOSED'
                 ? 'Last trading session closing settlement & after-hours corporate disclosures synchronized.'
                 : 'National & Bombay Stock Exchange feeds synchronized.'}{' '}
-              Terminal operator: <strong style={{ color: 'var(--text-primary)' }}>{displayName}</strong>.
+              Welcome back, <strong style={{ color: 'var(--text-primary)' }}>{displayName}</strong>.
             </p>
 
             {/* Quick Action Navigation Pills */}
@@ -159,11 +159,11 @@ export default function DashboardPage() {
                   fontSize: '11.5px',
                   fontWeight: 600,
                   textDecoration: 'none',
-                  boxShadow: '0 0 12px rgba(59, 130, 246, 0.25)',
+                  boxShadow: 'none',
                 }}
               >
                 <Zap size={13} />
-                <span>Instant Order Desk</span>
+                <span>Paper trading</span>
               </Link>
               <Link
                 to="/markets"
@@ -182,7 +182,7 @@ export default function DashboardPage() {
                 }}
               >
                 <BarChart3 size={13} color="var(--accent)" />
-                <span>Institutional Screener &amp; Treemap</span>
+                <span>Screener &amp; heatmap</span>
               </Link>
               <Link
                 to="/ai"
@@ -193,16 +193,16 @@ export default function DashboardPage() {
                   padding: '5px 12px',
                   borderRadius: 'var(--radius-xs)',
                   backgroundColor: 'rgba(168, 85, 247, 0.15)',
-                  color: '#c084fc',
+                  color: 'var(--accent-bright)',
                   border: '1px solid rgba(168, 85, 247, 0.40)',
                   fontSize: '11.5px',
                   fontWeight: 600,
                   textDecoration: 'none',
-                  boxShadow: '0 0 12px rgba(168, 85, 247, 0.20)',
+                  boxShadow: 'none',
                 }}
               >
                 <Sparkles size={13} color="#c084fc" />
-                <span>Agentic AI Quant Lab (5-Yr ML)</span>
+                <span>Pulse AI research</span>
               </Link>
             </div>
           </div>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
               borderRadius: 'var(--radius-md)', 
               backgroundColor: 'var(--surface)', 
               border: '1px solid var(--border)',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+              boxShadow: 'none',
               backdropFilter: 'blur(10px)'
             }}>
               <div style={{ 
@@ -274,10 +274,10 @@ export default function DashboardPage() {
               style={{
                 width: '38px',
                 height: '38px',
-                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                backgroundColor: 'var(--card-hover)',
                 border: '1px solid var(--border)',
                 borderRadius: 'var(--radius-sm)',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)'
+                boxShadow: 'none'
               }}
             >
               <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
@@ -285,10 +285,37 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Benchmark Indices Grid */}
+        <section>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+            <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.02em', margin: 0 }}>
+              Benchmark Indices
+            </h2>
+            <Link to="/markets" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 500 }}>
+              Explore markets &rarr;
+            </Link>
+          </div>
+
+          {isOverviewLoading ? (
+            <div className="benchmark-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '12px' }}>
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          ) : (
+            <div className="benchmark-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '12px' }}>
+              {overview?.indices?.map((idx) => (
+                <IndexCard key={idx.symbol} index={idx} onClick={() => navigate('/markets')} />
+              ))}
+            </div>
+          )}
+        </section>
+
         {/* Institutional Command Telemetry Ribbon */}
         <div style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
           gap: '12px',
         }}>
           {/* Turnover Telemetry Card */}
@@ -369,15 +396,15 @@ export default function DashboardPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Sparkles size={16} color="var(--accent-bright)" />
               <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em', margin: 0 }}>
-                Pulse AI Intelligence &amp; Breaking Market Wire
+                Research &amp; market news
               </h2>
             </div>
             <span className="badge badge--accent" style={{ fontSize: '10.5px' }}>
-              FLAGSHIP REAL-TIME DECK
+              MARKET INTELLIGENCE
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
+          <div className="research-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
             {/* Left: Pulse AI Post-Market Intelligence Suite (Last Day Wrap, Overnight Feed, Pivots) */}
             <div>
               <AISummaryCard />
@@ -391,7 +418,7 @@ export default function DashboardPage() {
                   <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Breaking Market Wire</span>
                 </div>
                 <Link to="/news" style={{ fontSize: '11.5px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
-                  All 30+ Disclosures &rarr;
+                  All news &rarr;
                 </Link>
               </div>
 
@@ -403,7 +430,7 @@ export default function DashboardPage() {
                       href={article.sourceUrl || '#'}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="card--interactive"
+                      className="card--interactive dashboard-news-item"
                       style={{
                         padding: '10px 12px',
                         backgroundColor: 'var(--surface)',
@@ -461,40 +488,13 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* Benchmark Indices Grid */}
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.02em', margin: 0 }}>
-              Benchmark Indices
-            </h2>
-            <Link to="/markets" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 500 }}>
-              Open Institutional Screener &rarr;
-            </Link>
-          </div>
-
-          {isOverviewLoading ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '12px' }}>
-              {overview?.indices?.map((idx) => (
-                <IndexCard key={idx.symbol} index={idx} onClick={() => navigate('/markets')} />
-              ))}
-            </div>
-          )}
-        </section>
-
         {/* Market Breadth */}
         <section>
           {overview?.breadth && <MarketBreadthBar breadth={overview.breadth} />}
         </section>
 
         {/* Two-Column Terminal Layout: Movers on Left, Sector Rotation on Right */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
+        <div className="market-analysis-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
           {/* Left Column: Intraday Market Movers & Institutional Activity */}
           <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* Tab Controls */}
@@ -541,7 +541,7 @@ export default function DashboardPage() {
 
             {/* High-Fidelity Stock Movers Table */}
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+              <table className="data-table dashboard-movers-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     <th style={{ padding: '8px 12px', fontWeight: 600 }}>Instrument</th>
@@ -638,7 +638,7 @@ export default function DashboardPage() {
                                       borderRadius: '50%', 
                                       backgroundColor: isPositive ? 'var(--positive)' : 'var(--negative)',
                                       transform: 'translateX(-50%)',
-                                      boxShadow: `0 0 6px ${isPositive ? 'var(--positive)' : 'var(--negative)'}`,
+                                      boxShadow: 'none',
                                     }} 
                                   />
                                 </div>
@@ -695,7 +695,7 @@ export default function DashboardPage() {
             <div 
               className="card card-padded"
               style={{
-                background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(14, 165, 233, 0.03) 100%), var(--surface)',
+                background: 'var(--surface)',
                 border: '1px solid rgba(59, 130, 246, 0.2)',
                 display: 'flex',
                 flexDirection: 'column',
@@ -719,7 +719,7 @@ export default function DashboardPage() {
                 className="btn btn-secondary"
                 style={{ padding: '8px 12px', fontSize: '12px', alignSelf: 'flex-start', marginTop: '4px', gap: '6px' }}
               >
-                <span>Open Market Treemap</span>
+                <span>Explore sector heatmap</span>
                 <ArrowRight size={13} />
               </Link>
             </div>

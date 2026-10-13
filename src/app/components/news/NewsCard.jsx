@@ -114,7 +114,7 @@ export default function NewsCard({ article, compact = false }) {
                 className="badge badge--accent badge--sm"
                 style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '4px', padding: '2px 7px' }}
               >
-                <CompanyLogo symbol={clean} size={14} style={{ borderRadius: '2px' }} />
+                <CompanyLogo symbol={clean} size={20} style={{ borderRadius: '4px' }} />
                 <span>{clean}</span>
               </button>
             );

@@ -90,7 +90,7 @@ export default function OnboardingPage() {
           width: '100%',
           maxWidth: '640px',
           padding: '36px',
-          boxShadow: 'var(--shadow-elevated)',
+          boxShadow: 'none',
         }}
       >
         {/* Step Indicator */}
@@ -144,7 +144,7 @@ export default function OnboardingPage() {
                       display: 'flex',
                       alignItems: 'center',
                       gap: '14px',
-                      boxShadow: isSelected ? '0 0 16px var(--accent-glow)' : 'none',
+                      boxShadow: 'none',
                     }}
                   >
                     <div
@@ -197,7 +197,7 @@ export default function OnboardingPage() {
               Select sectors you wish to track prominently on your terminal dashboard.
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: '8px', marginBottom: '28px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 180px), 1fr))', gap: '8px', marginBottom: '28px' }}>
               {SECTOR_OPTIONS.map((sector) => {
                 const isSelected = selectedSectors.includes(sector);
                 return (

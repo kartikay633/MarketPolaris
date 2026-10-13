@@ -53,14 +53,16 @@ export function TopBar() {
       <SearchModal isOpen={isSearchOpen} onClose={() => setIsSearchOpen(false)} />
       <header className="topbar">
         {/* Global Search Bar */}
-        <div
+        <button
+          type="button"
+          aria-label="Search stocks and indices"
           className="topbar-search"
           onClick={() => setIsSearchOpen(true)}
         >
           <Search size={14} color="var(--text-muted)" />
           <span className="topbar-search-placeholder">Search NSE/BSE stocks, indices...</span>
           <span className="topbar-kbd">{shortcutKey}</span>
-        </div>
+        </button>
 
         {/* Right Terminal Controls */}
         <div className="topbar-controls">
@@ -73,6 +75,7 @@ export function TopBar() {
           {/* Theme Toggle Button */}
           <button
             className="topbar-icon-btn"
+            aria-label={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             onClick={handleToggleTheme}
             style={{ color: theme === 'dark' ? '#F59E0B' : '#3B82F6' }}
@@ -83,6 +86,7 @@ export function TopBar() {
           {/* Price Alerts Notification Button */}
           <button
             className="topbar-icon-btn"
+            aria-label="Price Alerts & Triggers"
             title="Price Alerts & Triggers"
             onClick={() => navigate('/alerts')}
           >
@@ -92,7 +96,10 @@ export function TopBar() {
 
           {/* User Profile Menu */}
           <div style={{ position: 'relative' }}>
-            <div
+            <button
+              type="button"
+              aria-label="Account menu"
+              aria-expanded={showProfileMenu}
               className="topbar-profile-trigger"
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
@@ -101,7 +108,7 @@ export function TopBar() {
               </div>
               <span className="topbar-profile-name">{displayName}</span>
               <ChevronDown size={13} color="var(--text-muted)" />
-            </div>
+            </button>
 
             {/* Profile Dropdown */}
             {showProfileMenu && (

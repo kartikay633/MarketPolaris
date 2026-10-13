@@ -110,14 +110,14 @@ export default function SettingsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-narrow">
+      <div className="page-container-narrow settings-page">
         {/* Page Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '20px', paddingBottom: '16px', borderBottom: '1px solid var(--border)' }}>
           <div className="ai-avatar">
             <Settings size={16} />
           </div>
           <div>
-            <h1 className="page-title">Account & Terminal Settings</h1>
+            <h1 className="page-title">Settings</h1>
             <p className="page-subtitle" style={{ margin: '2px 0 0' }}>
               Simulated capital configuration, chart display preferences, and session controls.
             </p>
@@ -146,7 +146,7 @@ export default function SettingsPage() {
 
             {!isEditingProfile ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'linear-gradient(135deg, var(--accent), #6366F1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontSize: '16px', fontWeight: 600 }}>
+                <div style={{ width: '44px', height: '44px', borderRadius: '50%', background: 'var(--accent-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-bright)', fontSize: '16px', fontWeight: 600 }}>
                   {resolvedDisplayName.charAt(0).toUpperCase()}
                 </div>
                 <div style={{ flex: 1 }}>
@@ -159,7 +159,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                     <label style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>Trader Name</label>
                     <input
@@ -218,7 +218,7 @@ export default function SettingsPage() {
               Simulated Capital
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '12px', marginBottom: '16px' }}>
               <div style={{ backgroundColor: 'var(--surface)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
                 <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Available Cash</div>
                 <div className="num-tabular" style={{ fontSize: 'var(--text-lg)', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px' }}>

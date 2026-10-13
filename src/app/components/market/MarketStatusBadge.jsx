@@ -53,7 +53,7 @@ export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compac
         fontWeight: 700,
         color: dotColor,
         letterSpacing: '0.04em',
-        boxShadow: `0 0 12px ${dotColor}22`,
+        boxShadow: 'none',
       }}
       title={nextEvent || reason || label}
     >
@@ -63,7 +63,7 @@ export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compac
           height: '7px',
           borderRadius: '50%',
           backgroundColor: dotColor,
-          boxShadow: `0 0 8px ${dotColor}`,
+          boxShadow: 'none',
         }}
         className={isLive ? 'animate-pulse' : ''}
       />

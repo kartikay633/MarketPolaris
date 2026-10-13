@@ -1,0 +1,188 @@
+{
+  "scope": {
+    "pass": true,
+    "files": []
+  },
+  "jsx": [
+    {
+      "file": "src/App.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/ai/AISummaryCard.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/ai/FloatingAIWidget.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/charts/StockChart.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/common/CompanyLogo.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/market/IndexCard.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/market/MarketBreadthBar.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/market/MarketHeatmap.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/market/MarketStatusBadge.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/market/SectorBar.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/components/navigation/SearchModal.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/layouts/Sidebar.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/layouts/TopBar.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/AIPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/AlertsPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/DashboardPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/MarketsPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/NewsPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/OnboardingPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/PortfolioPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/SettingsPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/StockDetailPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/TradePage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    },
+    {
+      "file": "src/app/pages/WatchlistPage.jsx",
+      "preservedBindings": true,
+      "preservedHooks": true,
+      "missingBindings": [],
+      "missingHooks": []
+    }
+  ],
+  "testScripts": {
+    "dev": "concurrently -k -n \"api,web\" -c \"yellow,cyan\" \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:backend": "nodemon server/index.js",
+    "dev:frontend": "vite --host --port 5173",
+    "server": "node server/index.js",
+    "server:dev": "nodemon server/index.js",
+    "client:dev": "vite --host --port 5173",
+    "build": "vite build",
+    "preview": "vite preview",
+    "db:migrate": "node server/db/migrate.js"
+  },
+  "pass": true
+}

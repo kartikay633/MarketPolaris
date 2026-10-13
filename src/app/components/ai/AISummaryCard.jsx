@@ -66,7 +66,7 @@ export default function AISummaryCard() {
           right: '-20px',
           width: '120px',
           height: '120px',
-          background: 'radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%)',
+          background: 'transparent',
           pointerEvents: 'none',
           filter: 'blur(15px)',
         }}
@@ -84,7 +84,7 @@ export default function AISummaryCard() {
               borderRadius: '50%',
               objectFit: 'cover',
               border: '1px solid rgba(59, 130, 246, 0.5)',
-              boxShadow: '0 0 10px rgba(59, 130, 246, 0.4)',
+              boxShadow: 'none',
             }}
           />
           <div>
@@ -117,7 +117,7 @@ export default function AISummaryCard() {
       <div 
         className="tab-group" 
         style={{ 
-          backgroundColor: 'rgba(255, 255, 255, 0.03)', 
+          backgroundColor: 'var(--card-hover)',
           border: '1px solid var(--border-subtle)',
           padding: '2px',
           borderRadius: 'var(--radius-sm)',
@@ -165,7 +165,7 @@ export default function AISummaryCard() {
 
           {/* Key Drivers */}
           {summary?.keyDrivers && summary.keyDrivers.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', backgroundColor: 'rgba(255, 255, 255, 0.02)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', backgroundColor: 'var(--card-hover)', padding: '8px 10px', borderRadius: 'var(--radius-xs)', border: '1px solid var(--border-subtle)' }}>
               {summary.keyDrivers.map((driver, idx) => (
                 <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '6px', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
                   <span style={{ color: 'var(--accent)', fontWeight: 700, minWidth: '10px' }}>•</span>
@@ -231,28 +231,28 @@ export default function AISummaryCard() {
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
+            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>NIFTY 50 Support</div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                 {pivots.niftySupport}
               </div>
             </div>
 
-            <div style={{ padding: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
+            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>NIFTY 50 Resistance</div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--negative)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                 {pivots.niftyResistance}
               </div>
             </div>
 
-            <div style={{ padding: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
+            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Options Max Pain</div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-bright)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                 {pivots.maxPain} Strike
               </div>
             </div>
 
-            <div style={{ padding: '8px', backgroundColor: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
+            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
               <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Put-Call Ratio (PCR)</div>
               <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
                 {pivots.pcr}
@@ -274,7 +274,7 @@ export default function AISummaryCard() {
             alignItems: 'center',
             gap: '4px',
             fontSize: '12px',
-            color: '#c084fc',
+            color: 'var(--accent-bright)',
             fontWeight: 600,
             textDecoration: 'none',
             backgroundColor: 'rgba(168, 85, 247, 0.12)',

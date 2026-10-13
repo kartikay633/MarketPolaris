@@ -122,6 +122,9 @@ export default function SearchModal({ isOpen, onClose }) {
       <div
         onClick={(e) => e.stopPropagation()}
         className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Search stocks and indices"
         style={{
           maxWidth: '580px',
           padding: 0,
@@ -142,6 +145,7 @@ export default function SearchModal({ isOpen, onClose }) {
           <Search size={16} color="var(--accent)" />
           <input
             ref={inputRef}
+            aria-label="Search equities"
             type="text"
             placeholder="Search equities by ticker, name, or sector (e.g. RELIANCE, TCS)..."
             value={query}
@@ -158,14 +162,15 @@ export default function SearchModal({ isOpen, onClose }) {
           {query && (
             <button
               onClick={() => setQuery('')}
+              aria-label="Clear search"
               style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: 0 }}
             >
               <X size={15} />
             </button>
           )}
-          <span className="topbar-kbd">
-            ESC
-          </span>
+          <button type="button" className="search-close" onClick={onClose} aria-label="Close search">
+            <X size={16} />
+          </button>
         </div>
 
         {/* Results List */}

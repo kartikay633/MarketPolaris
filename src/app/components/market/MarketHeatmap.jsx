@@ -144,7 +144,7 @@ export default function MarketHeatmap() {
       </div>
 
       {/* Sector Groups Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
         {HEATMAP_DATA.map((group) => (
           <div
             key={group.sector}
@@ -166,7 +166,7 @@ export default function MarketHeatmap() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 90px), 1fr))',
                 gap: '6px',
                 flex: 1,
               }}

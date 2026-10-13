@@ -68,12 +68,12 @@ export default function AlertsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-wide">
+      <div className="page-container-wide alerts-page">
         {/* Page Header */}
         <div className="page-header">
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <h1 className="page-title">Price Triggers & Alerts</h1>
+              <h1 className="page-title">Price alerts</h1>
               <span className="badge badge--accent">{activeAlerts.length} ACTIVE</span>
             </div>
             <p className="page-subtitle">
@@ -121,8 +121,8 @@ export default function AlertsPage() {
         </div>
 
         {/* Alerts Table */}
-        <div className="card" style={{ overflow: 'hidden' }}>
-          <div className="table-header" style={{ gridTemplateColumns: 'minmax(180px, 2fr) minmax(130px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) 100px' }}>
+        <div className="card terminal-table-scroll" style={{ overflow: 'hidden' }}>
+          <div className="table-header terminal-data-row" style={{ gridTemplateColumns: 'minmax(180px, 2fr) minmax(130px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) 100px' }}>
             <span>Instrument</span>
             <span>Trigger Condition</span>
             <span>Target Price</span>
@@ -148,7 +148,7 @@ export default function AlertsPage() {
                 return (
                   <div
                     key={alert.id}
-                    className="table-row"
+                    className="table-row terminal-data-row"
                     style={{
                       gridTemplateColumns: 'minmax(180px, 2fr) minmax(130px, 1fr) minmax(140px, 1fr) minmax(140px, 1fr) 100px',
                       cursor: 'default',
@@ -202,10 +202,10 @@ export default function AlertsPage() {
         {/* Modal: Create Alert */}
         {showCreateModal && (
           <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
-            <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-card" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="price-alert-title">
               <div className="modal-header">
-                <h3 className="modal-title">Set Price Trigger</h3>
-                <button className="modal-close" onClick={() => setShowCreateModal(false)}>
+                <h3 className="modal-title" id="price-alert-title">Set Price Trigger</h3>
+                <button className="modal-close" onClick={() => setShowCreateModal(false)} aria-label="Close price alert">
                   <X size={16} />
                 </button>
               </div>

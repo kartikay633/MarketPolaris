@@ -21,7 +21,7 @@ const NAV_ITEMS = [
   { name: 'Portfolio', path: '/portfolio', icon: Briefcase, color: '#A855F7' },
   { name: 'Trade Terminal', path: '/trade', icon: CandlestickChart, color: '#06B6D4' },
   { name: 'News Pulse', path: '/news', icon: Newspaper, color: '#F97316' },
-  { name: 'Pulse AI', path: '/ai', icon: Bot, badge: 'AGENTIC ML', color: '#3B82F6' },
+  { name: 'Pulse AI', path: '/ai', icon: Bot, badge: 'AI', color: '#3B82F6' },
   { name: 'Price Alerts', path: '/alerts', icon: Bell, color: '#F43F5E' },
 ];
 
@@ -42,9 +42,9 @@ export function Sidebar() {
       </div>
 
       {/* Nav List */}
-      <nav className="sidebar-nav">
+      <nav className="sidebar-nav" aria-label="Main navigation">
         <span className="sidebar-section-label">
-          Terminal Cockpit
+          Workspace
         </span>
 
         {NAV_ITEMS.map((item) => {
@@ -53,6 +53,7 @@ export function Sidebar() {
             <NavLink
               key={item.path}
               to={item.path}
+              title={item.name}
               className={({ isActive }) =>
                 `sidebar-nav-item${isActive ? ' sidebar-nav-item--active' : ''}`
               }
@@ -65,8 +66,8 @@ export function Sidebar() {
                         display: 'flex', 
                         alignItems: 'center', 
                         justifyContent: 'center',
-                        color: isActive ? item.color : 'inherit',
-                        filter: isActive ? `drop-shadow(0 0 6px ${item.color})` : 'none',
+                        color: isActive ? 'var(--accent-bright)' : 'inherit',
+                        filter: 'none',
                         transition: 'all var(--transition-fast)',
                       }}
                     >
@@ -83,7 +84,7 @@ export function Sidebar() {
                         backgroundColor: 'rgba(59, 130, 246, 0.18)',
                         color: 'var(--accent-bright)',
                         border: '1px solid rgba(59, 130, 246, 0.35)',
-                        boxShadow: '0 0 8px rgba(59, 130, 246, 0.3)',
+                        boxShadow: 'none',
                       }}
                     >
                       {item.badge}
@@ -99,6 +100,7 @@ export function Sidebar() {
 
         <NavLink
           to="/settings"
+          title="Settings"
           className={({ isActive }) =>
             `sidebar-nav-item${isActive ? ' sidebar-nav-item--active' : ''}`
           }
@@ -111,7 +113,7 @@ export function Sidebar() {
                   alignItems: 'center', 
                   justifyContent: 'center',
                   color: isActive ? '#3B82F6' : 'inherit',
-                  filter: isActive ? 'drop-shadow(0 0 6px #3B82F6)' : 'none',
+                  filter: 'none',
                   transition: 'all var(--transition-fast)',
                 }}
               >

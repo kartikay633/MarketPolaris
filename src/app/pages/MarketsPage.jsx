@@ -158,12 +158,12 @@ export default function MarketsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container">
+      <div className="page-container markets-page">
         {/* Page Header */}
         <div className="page-header" style={{ marginBottom: '16px' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-              <h1 className="page-title">Institutional Equities Screener &amp; Structure</h1>
+              <h1 className="page-title">Markets &amp; screener</h1>
               <span className="badge badge--accent">
                 QUANTITATIVE WORKSTATION
               </span>
@@ -201,11 +201,11 @@ export default function MarketsPage() {
           className="card card-padded"
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 180px), 1fr))',
             gap: '14px',
-            background: 'linear-gradient(135deg, rgba(30, 41, 59, 0.4) 0%, rgba(15, 23, 42, 0.6) 100%), var(--surface)',
+            background: 'var(--surface)',
             border: '1px solid var(--border)',
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.4)',
+            boxShadow: 'none',
           }}
         >
           {/* NIFTY PCR */}
@@ -477,7 +477,7 @@ export default function MarketsPage() {
                               style={{ 
                                 fontSize: '11px', 
                                 color: 'var(--text-secondary)',
-                                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                                backgroundColor: 'var(--card-hover)',
                                 border: '1px solid var(--border-subtle)',
                                 padding: '2px 8px',
                                 borderRadius: 'var(--radius-xs)',
@@ -531,7 +531,7 @@ export default function MarketsPage() {
                                     borderRadius: '50%', 
                                     backgroundColor: isPositive ? 'var(--positive)' : 'var(--negative)',
                                     transform: 'translateX(-50%)',
-                                    boxShadow: `0 0 6px ${isPositive ? 'var(--positive)' : 'var(--negative)'}`,
+                                    boxShadow: 'none',
                                   }} 
                                 />
                               </div>

@@ -68,13 +68,15 @@ export default function StockChart({
     const container = chartContainerRef.current;
     const width = container.clientWidth || 800;
     const height = 460;
+    const styles = getComputedStyle(document.documentElement);
+    const token = (name) => styles.getPropertyValue(name).trim();
 
     const chart = createChart(container, {
       width,
       height,
       layout: {
-        background: { type: ColorType.Solid, color: isLight ? '#FFFFFF' : '#05070B' },
-        textColor: isLight ? '#475569' : '#94A3B8',
+        background: { type: ColorType.Solid, color: token('--surface') },
+        textColor: token('--text-muted'),
         fontFamily: "'JetBrains Mono', 'Inter', system-ui, -apple-system, sans-serif",
         fontSize: 11,
       },
@@ -251,7 +253,7 @@ export default function StockChart({
         backgroundColor: isLight ? '#FFFFFF' : '#05070B',
         borderRadius: 'var(--radius-md)',
         border: '1px solid var(--border)',
-        boxShadow: 'var(--shadow-card)',
+        boxShadow: 'none',
         overflow: 'hidden',
       }}
     >
@@ -270,7 +272,7 @@ export default function StockChart({
         }}
       >
         {/* Timeframe Selector */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--card-hover)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
           {TIMEFRAMES.map((tf) => {
             const isActive = selectedTimeframe === tf.id;
             return (
@@ -286,7 +288,7 @@ export default function StockChart({
                   cursor: 'pointer',
                   backgroundColor: isActive ? 'var(--accent)' : 'transparent',
                   color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
-                  boxShadow: isActive ? '0 2px 8px var(--accent-glow)' : 'none',
+                  boxShadow: 'none',
                   transition: 'all var(--transition-fast)',
                 }}
               >
@@ -298,7 +300,7 @@ export default function StockChart({
 
         {/* Chart Type Selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: 'rgba(255, 255, 255, 0.04)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', backgroundColor: 'var(--card-hover)', padding: '3px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)' }}>
             {CHART_TYPES.map((ct) => {
               const Icon = ct.icon;
               const isActive = chartType === ct.id;
@@ -335,7 +337,7 @@ export default function StockChart({
             style={{
               padding: '6px 9px',
               borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              backgroundColor: 'var(--card-hover)',
               border: '1px solid var(--border-subtle)',
               color: 'var(--text-secondary)',
               cursor: 'pointer',
@@ -357,7 +359,7 @@ export default function StockChart({
           alignItems: 'center',
           gap: '16px',
           padding: '8px 16px',
-          backgroundColor: isLight ? '#F1F5F9' : '#070A0F',
+          backgroundColor: 'var(--background)',
           borderBottom: '1px solid var(--border-subtle)',
           fontSize: '12px',
         }}
@@ -367,7 +369,7 @@ export default function StockChart({
         </div>
 
         {activeCandle?.open !== undefined && (
-          <div style={{ display: 'flex', gap: '14px', alignItems: 'center', fontFamily: 'var(--font-mono)' }}>
+          <div className="chart-ohlc-values" style={{ display: 'flex', gap: '14px', alignItems: 'center', fontFamily: 'var(--font-mono)' }}>
             <span>
               <span style={{ color: 'var(--text-muted)' }}>O: </span>
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>₹{formatIndianNumber(activeCandle.open)}</span>
@@ -410,7 +412,7 @@ export default function StockChart({
       </div>
 
       {/* Chart Canvas Area */}
-      <div style={{ position: 'relative', width: '100%', minHeight: '460px', backgroundColor: isLight ? '#FFFFFF' : '#05070B' }}>
+      <div style={{ position: 'relative', width: '100%', minHeight: '460px', backgroundColor: 'var(--surface)' }}>
         {isLoading && (
           <div
             style={{

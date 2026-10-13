@@ -269,10 +269,10 @@ export default function TradePage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-wide">
+      <div className="page-container-wide trade-page">
         {/* Institutional Simulated Capital Cockpit */}
         <div
-          className="card card-padded"
+          className="trade-heading"
           style={{
             marginBottom: '18px',
             display: 'flex',
@@ -280,9 +280,9 @@ export default function TradePage() {
             alignItems: 'center',
             justifyContent: 'space-between',
             gap: '16px',
-            background: 'linear-gradient(135deg, rgba(37, 99, 235, 0.12) 0%, rgba(14, 165, 233, 0.05) 50%, rgba(255, 255, 255, 0.01) 100%), var(--surface)',
+            background: 'var(--surface)',
             borderColor: 'rgba(59, 130, 246, 0.28)',
-            boxShadow: '0 8px 30px -4px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(59, 130, 246, 0.15)',
+            boxShadow: 'none',
             position: 'relative',
             overflow: 'hidden',
           }}
@@ -291,7 +291,7 @@ export default function TradePage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', zIndex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <h1 className="page-title" style={{ fontSize: '20px', margin: 0 }}>
-                Institutional Order Desk
+                Paper trading
               </h1>
               <span className="badge badge--live" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <Zap size={11} /> LIVE EXECUTION ENGINE
@@ -455,7 +455,7 @@ export default function TradePage() {
                     fontSize: '12.5px',
                     borderRadius: showDropdown ? 'var(--radius-sm) var(--radius-sm) 0 0' : 'var(--radius-sm)',
                     borderColor: showDropdown ? 'var(--accent)' : 'var(--border)',
-                    boxShadow: showDropdown ? '0 0 12px rgba(59, 130, 246, 0.3)' : 'none',
+                    boxShadow: 'none',
                   }}
                 />
               </div>
@@ -475,7 +475,7 @@ export default function TradePage() {
                   border: '1px solid rgba(59, 130, 246, 0.35)',
                   borderTop: 'none',
                   borderRadius: '0 0 var(--radius-md) var(--radius-md)',
-                  boxShadow: '0 16px 36px -4px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(59, 130, 246, 0.2)',
+                  boxShadow: 'none',
                   zIndex: 9999,
                   backdropFilter: 'blur(20px)',
                 }}
@@ -567,17 +567,13 @@ export default function TradePage() {
         </div>
 
         {/* 2-Column Terminal Layout: Upgraded Order Ticket on Left, Position & Audit Log on Right */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: '20px', alignItems: 'start' }}>
+        <div className="terminal-panel-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(360px, 440px) 1fr', gap: '20px', alignItems: 'start' }}>
           {/* Order Ticket Card */}
           <div
             className="card card-padded"
             style={{
               transition: 'box-shadow 0.3s ease, border-color 0.3s ease',
-              boxShadow: isSuccessGlow
-                ? orderType === 'BUY'
-                  ? '0 0 35px rgba(16, 185, 129, 0.45), 0 0 0 2px var(--positive)'
-                  : '0 0 35px rgba(244, 63, 94, 0.45), 0 0 0 2px var(--negative)'
-                : 'var(--shadow-md)',
+              boxShadow: 'none',
             }}
           >
             {/* Live Ticker Header */}
@@ -660,7 +656,7 @@ export default function TradePage() {
                 </span>
               </label>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+              <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
                 <button
                   type="button"
                   onClick={() => setProductType('CNC')}
@@ -701,7 +697,7 @@ export default function TradePage() {
 
             {/* Execution Order Type: Market vs Limit */}
             <div style={{ marginBottom: '14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+              <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
                 <button
                   type="button"
                   onClick={() => setExecutionType('MARKET')}
@@ -843,7 +839,7 @@ export default function TradePage() {
                       fontSize: '10.5px',
                       fontWeight: 600,
                       borderRadius: 'var(--radius-xs)',
-                      backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                      backgroundColor: 'var(--card-hover)',
                       border: '1px solid var(--border)',
                       color: 'var(--text-secondary)',
                       cursor: 'pointer',

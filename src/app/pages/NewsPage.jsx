@@ -21,7 +21,7 @@ export default function NewsPage() {
 
   return (
     <ErrorBoundary>
-      <div className="page-container-wide">
+      <div className="page-container-wide news-page">
         {/* Page Header */}
         <div className="page-header">
           <div>
@@ -45,7 +45,7 @@ export default function NewsPage() {
         </div>
 
         {/* Main Content Grid (News Feed + Sidebar) */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.5fr) minmax(280px, 1fr)', gap: '20px', alignItems: 'start' }}>
+        <div className="terminal-panel-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2.5fr) minmax(280px, 1fr)', gap: '20px', alignItems: 'start' }}>
           {/* Left Column: News Feed */}
           <div>
             <NewsFeed

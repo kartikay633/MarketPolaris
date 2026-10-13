@@ -1,5 +1,5 @@
 // Flagship CompanyLogo — Institutional Stock Brand Logo Component
-// Multi-tiered waterfall: Google S2 (128px) → Unavatar → DuckDuckGo → Branded Initials
+// Official local artwork → resolution-checked remote icons → branded initials.
 import React, { useState } from 'react';
 
 // Institutional Indian Stock Symbol → Domain Mapping
@@ -73,6 +73,18 @@ const STOCK_DOMAINS = {
   TRENT:       ['trentlimited.com', 'tata.com'],
 };
 
+// Original company artwork is bundled so common badges do not depend on tiny favicons.
+// Asset provenance and viewport adaptations are recorded in public/company-logos/SOURCES.md.
+const LOCAL_LOGOS = {
+  TATAMOTORS: '/company-logos/tata.png',
+  TATASTEEL: '/company-logos/tata.png',
+  TCS: '/company-logos/tcs.png',
+  RELIANCE: '/company-logos/reliance.png',
+  HDFCBANK: '/company-logos/hdfcbank.svg',
+  ICICIBANK: '/company-logos/icicibank.ico',
+  ITC: '/company-logos/itc.png',
+};
+
 // Brand colors for polished fallback avatars
 const BRAND_PALETTES = {
   RELIANCE:    { bg: 'linear-gradient(135deg, #0b1f5c 0%, #1e3a8a 100%)', text: '#93c5fd', border: 'rgba(59, 130, 246, 0.4)' },
@@ -108,10 +120,10 @@ function buildCandidateUrls(symbol) {
   const clean = symbol.replace(/^(NSE:|BSE:)/, '').toUpperCase().trim();
   const domains = STOCK_DOMAINS[clean] || [];
   
-  const urls = [];
+  const urls = LOCAL_LOGOS[clean] ? [LOCAL_LOGOS[clean]] : [];
   for (const domain of domains) {
-    // 1. Google Favicon Service (128px high-res PNG)
-    urls.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=128`);
+    // Requested size is only a hint: successful responses can still be 16px.
+    urls.push(`https://www.google.com/s2/favicons?domain=${domain}&sz=256`);
     // 2. Unavatar Service
     urls.push(`https://unavatar.io/${domain}`);
     // 3. DuckDuckGo Icon Service
@@ -129,6 +141,13 @@ export function CompanyLogo({ symbol = '', size = 32, className = '', style = {}
   const candidateUrls = React.useMemo(() => buildCandidateUrls(cleanSym), [cleanSym]);
   const [candidateIdx, setCandidateIdx] = useState(0);
   const [loaded, setLoaded] = useState(false);
+  const [imageDimensions, setImageDimensions] = useState(null);
+
+  React.useEffect(() => {
+    setCandidateIdx(0);
+    setLoaded(false);
+    setImageDimensions(null);
+  }, [cleanSym]);
 
   const palette = BRAND_PALETTES[cleanSym] || DEFAULT_PALETTE;
   const initials = cleanSym.slice(0, 2);
@@ -137,13 +156,23 @@ export function CompanyLogo({ symbol = '', size = 32, className = '', style = {}
 
   const hasMoreCandidates = candidateIdx < candidateUrls.length;
   const currentUrl = hasMoreCandidates ? candidateUrls[candidateIdx] : null;
+  const isVector = currentUrl?.endsWith('.svg');
+  const pixelRatio = typeof window === 'undefined' ? 1 : Math.max(1, window.devicePixelRatio || 1);
 
   const handleImageError = () => {
     setLoaded(false);
+    setImageDimensions(null);
     setCandidateIdx((prev) => prev + 1);
   };
 
-  const handleImageLoad = () => {
+  const handleImageLoad = (event) => {
+    const { naturalWidth, naturalHeight } = event.currentTarget;
+    // An HTTP success does not guarantee a usable badge image.
+    if (!isVector && Math.max(naturalWidth, naturalHeight) < 32) {
+      handleImageError();
+      return;
+    }
+    setImageDimensions({ width: naturalWidth, height: naturalHeight });
     setLoaded(true);
   };
 
@@ -172,24 +201,27 @@ export function CompanyLogo({ symbol = '', size = 32, className = '', style = {}
           backgroundColor: '#FFFFFF',
           padding: `${padding}px`,
           border: '1px solid rgba(255, 255, 255, 0.18)',
-          boxShadow: '0 2px 6px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.4)',
+          boxShadow: 'none',
           transition: 'transform 0.15s ease, box-shadow 0.15s ease',
         }}
         title={`${cleanSym} (NSE)`}
       >
         <img
-          key={currentUrl}
+          key={`${cleanSym}:${currentUrl}`}
           src={currentUrl}
           alt={cleanSym}
           onError={handleImageError}
           onLoad={handleImageLoad}
+          decoding="async"
           style={{
             width: '100%',
             height: '100%',
+            maxWidth: !isVector && imageDimensions ? `${imageDimensions.width / pixelRatio}px` : undefined,
+            maxHeight: !isVector && imageDimensions ? `${imageDimensions.height / pixelRatio}px` : undefined,
             objectFit: 'contain',
             opacity: loaded ? 1 : 0.7,
             transition: 'opacity 0.2s ease',
-            imageRendering: '-webkit-optimize-contrast',
+            imageRendering: 'auto',
           }}
           loading="lazy"
         />
@@ -205,7 +237,7 @@ export function CompanyLogo({ symbol = '', size = 32, className = '', style = {}
         ...containerStyle,
         background: palette.bg,
         border: `1px solid ${palette.border}`,
-        boxShadow: `0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15)`,
+        boxShadow: 'none',
       }}
       title={`${cleanSym} (NSE)`}
     >
