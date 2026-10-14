@@ -1,916 +1,142 @@
-// ROADMAP: Section 5 & 10 — Pulse AI Flagship Intelligence & Agentic Alpha Lab
-// Multi-Agent Quantitative Architecture with 5-Year Historical Market Trend ML
-import React, { useState, useEffect, useRef } from 'react';
-import { useSearchParams, useNavigate, Link } from 'react-router-dom';
-import { useAIChat, useAgenticAnalysis } from '../hooks/useAI';
+import React, { useEffect, useRef, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import {
-  Send,
-  User,
-  RefreshCw,
-  Cpu,
-  ShieldCheck,
-  Terminal,
-  Zap,
-  Sparkles,
-  Bot,
-  Activity,
-  Layers,
-  BarChart3,
-  TrendingUp,
-  TrendingDown,
-  ArrowRight,
-  CheckCircle2,
-  AlertTriangle,
-  Flame,
-  Search,
-  Sliders,
-  Compass,
-  Target,
-  Scale,
-  History,
-  BarChart2,
-  PieChart,
-  Info,
-  FileText,
-} from 'lucide-react';
-import ErrorBoundary from '../components/common/ErrorBoundary';
+import { Activity, ArrowUpRight, BookOpen, FlaskConical, MessageSquare, PieChart, RefreshCw, Search, Send, X } from 'lucide-react';
+import api from '../services/api';
+import { usePortfolio } from '../hooks/useTrade';
 import CompanyLogo from '../components/common/CompanyLogo';
-import { EQUITIES_UNIVERSE } from '../constants/equities';
-import { formatIndianNumber } from '../utils/formatters';
+import ErrorBoundary from '../components/common/ErrorBoundary';
 import '../styles/markdown.css';
+import '../styles/pulse-research.css';
 
-const STRATEGY_PRESETS = [
-  {
-    id: '5yr-trend-alpha',
-    name: '5-Year Trend & Growth Strategy',
-    badge: '5-YEAR HISTORY AI',
-    desc: 'Analyzes 5 years of daily market trends to find stocks with consistent upward momentum.',
-    icon: Flame,
-    color: '#3b82f6',
-  },
-  {
-    id: 'institutional-flow',
-    name: 'Big Money (FII/DII) Follower',
-    badge: 'MUTUAL FUND INFLOW',
-    desc: 'Tracks where major financial institutions and mutual funds are investing their cash.',
-    icon: Activity,
-    color: '#10b981',
-  },
-  {
-    id: 'mean-reversion',
-    name: 'Dip Buying & Rebound Strategy',
-    badge: 'BARGAIN RECOVERY',
-    desc: 'Finds strong companies that have temporarily dipped and are ready to bounce back.',
-    icon: Compass,
-    color: '#f59e0b',
-  },
-];
+const tabs = [['opportunities', 'Stock outlook', Activity], ['evidence', 'Model evidence', FlaskConical], ['news', 'News ledger', BookOpen], ['portfolio', 'Portfolio', PieChart], ['chat', 'Research chat', MessageSquare]];
+const pct = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : 'Unavailable';
+const pct2 = value => Number.isFinite(value) ? `${value > 0 ? '+' : ''}${(value * 100).toFixed(2)}%` : 'Unavailable';
+const num = (value, digits = 3) => Number.isFinite(value) ? value.toLocaleString('en-IN', { maximumFractionDigits: digits }) : 'Unavailable';
+const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'Unavailable';
+const cleanSymbol = value => (value || '').replace(/^(NSE|BSE):/, '').toUpperCase();
+const safeUrl = value => /^https?:\/\//i.test(value || '') ? value : undefined;
+const readable = value => typeof value === 'string' ? value : JSON.stringify(value);
+function Note({ children, error = false }) { return <div className={`pr-note${error ? ' pr-note--error' : ''}`} role={error ? 'alert' : undefined}>{children}</div>; }
+function Empty({ title, children }) { return <div className="pr-empty"><BookOpen size={24} /><h3>{title}</h3><p>{children}</p></div>; }
+function Metric({ label, value, detail }) { return <div className="pr-metric"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div>; }
+function Panel({ title, subtitle, children, action }) { return <section className="pr-panel"><header className="pr-panel-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action}</header>{children}</section>; }
+function Facts({ rows }) { return <dl className="pr-facts">{rows.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>; }
 
-const SUGGESTIONS = [
-  'NIFTY 50 market breadth & regime today',
-  'Reliance Industries technical & price action breakdown',
-  'What is driving banking sector momentum?',
-  'INDIA VIX volatility signals for Indian equities',
-  'Tata Motors multi-timeframe analysis',
-];
+const TARGET_NAMES = { peer: 'Beat peer median', benchmark: 'Beat NIFTY 50', absolute: 'Positive return' };
+const signed = (value, digits = 3) => Number.isFinite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(digits)}` : 'Unavailable';
+const range = ci => ci ? `${pct(ci.lower)} – ${pct(ci.upper)}` : 'Unavailable';
+const evidenceText = { positive: 'Positive: ranking skill held up on unseen data', inconclusive: 'Inconclusive: unseen-data ranking skill is not statistically established', negative: 'Negative: the ranking underperformed on unseen data' };
+
+function RankEvaluation({ result }) {
+  const primary = result.targets[result.primaryTarget], h = primary.holdout, r = h.ranking || {}, port = primary.portfolio || {};
+  const quint = primary.quintiles?.meanExcessByQuintile || {};
+  return <>
+    <Note><strong>{evidenceText[primary.rankingEvidence] || 'Evidence status unavailable'}.</strong> {primary.meets90PercentAccuracy ? 'The holdout reports at least 90% accuracy; check sample size and intervals.' : `90% accuracy was not achieved: unseen-period accuracy is ${pct(h.accuracy)}.`} For daily stock returns, honest out-of-sample accuracy close to 50% with a small positive ranking edge is typical; claims of 90% normally indicate leakage.</Note>
+    <div className="pr-metrics"><Metric label="Unseen-period accuracy" value={pct(h.accuracy)} detail={`95% interval ${range(h.accuracyConfidenceInterval)}`} /><Metric label="Mean rank IC" value={signed(r.meanIC)} detail={`95% interval ${signed(r.meanICConfidenceInterval?.lower)} to ${signed(r.meanICConfidenceInterval?.upper)}`} /><Metric label="Top minus bottom quintile" value={pct2(primary.quintiles?.topMinusBottom)} detail={`Per ${result.horizon}-session period, before costs`} /><Metric label="Top-20 excess vs universe" value={pct(port.annualExcessVsUniverse)} detail={`Annualised, after ${num(port.roundTripCostBps, 0)} bps costs`} /></div>
+    <Panel title="Prediction objectives compared" subtitle={`Same stocks, dates and protocol · holdout ${date(h.start)} – ${date(h.end)} · ${num(h.sessions, 0)} sessions`}><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Objective</th><th>Selected model</th><th>Accuracy (95% interval)</th><th>Baseline accuracy</th><th>Log loss vs baseline</th><th>AUC</th><th>Mean IC</th><th>Evidence</th></tr></thead><tbody>{Object.entries(result.targets).map(([key, t]) => <tr key={key}><th scope="row">{TARGET_NAMES[key] || key}</th><td>{t.selectedModel}</td><td>{pct(t.holdout.accuracy)} ({range(t.holdout.accuracyConfidenceInterval)})</td><td>{pct(t.baselines?.trainingRate?.accuracy)}</td><td>{num(t.holdout.logLoss, 4)} vs {num(t.baselines?.trainingRate?.logLoss, 4)}</td><td>{num(t.holdout.auc)}</td><td>{signed(t.holdout.ranking?.meanIC)}</td><td>{t.rankingEvidence}</td></tr>)}</tbody></table></div><p className="pr-panel-body pr-small">Direction targets mix stock selection with market timing. The peer objective removes the market move and is balanced by construction, so 50% is the no-skill reference. Holdout predictions use models refitted every 63 sessions on matured data only.</p></Panel>
+    <div className="pr-two-col"><Panel title="Can any subset reach 90%?" subtitle="Accuracy when only the most confident predictions are kept"><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Most confident share</th><th>Development accuracy</th><th>Unseen accuracy</th><th>Unseen predictions</th></tr></thead><tbody>{(primary.selectiveHoldout || []).map((row, i) => <tr key={row.coverage}><th scope="row">{pct(row.coverage)}</th><td>{pct(primary.selectiveDevelopment?.[i]?.accuracy)}</td><td>{pct(row.accuracy)}</td><td>{num(row.samples, 0)}</td></tr>)}</tbody></table></div><p className="pr-panel-body pr-small">If accuracy does not rise as coverage shrinks, model confidence carries little information. No threshold was tuned on the unseen period.</p></Panel>
+      <Panel title="Ranking and portfolio" subtitle="Mean excess return versus same-date median, by model quintile"><Facts rows={[...['1', '2', '3', '4', '5'].map(q => [`Quintile ${q}${q === '5' ? ' (highest score)' : q === '1' ? ' (lowest score)' : ''}`, pct2(quint[q])]),
+        ['IC positive on', pct(r.icHitRate)], ['Non-overlapping t-statistic', num(r.nonOverlappingTStat, 2)], ['Top-20 annual return', pct(port.annualReturn)], ['Universe annual return', pct(port.universeAnnualReturn)], ['NIFTY 50 annual return', pct(port.niftyAnnualReturn)], ['Excess across start dates', `${pct(port.excessRangeAcrossStartOffsets?.[0])} to ${pct(port.excessRangeAcrossStartOffsets?.[1])}`], ['Drawdown at rebalances', pct(port.maxDrawdownAtRebalance)]]} /></Panel></div>
+    <div className="pr-two-col"><Panel title="Calibration on unseen data" subtitle="Predicted probability versus observed frequency"><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Mean predicted</th><th>Observed</th><th>Rows</th></tr></thead><tbody>{(primary.reliabilityHoldout || []).map((row, i) => <tr key={i}><td>{pct(row.predicted)}</td><td>{pct(row.observed)}</td><td>{num(row.samples, 0)}</td></tr>)}</tbody></table></div></Panel>
+      <Panel title="Stability across regimes" subtitle="Unseen period split by year and market trend"><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Group</th><th>Accuracy</th><th>Mean IC</th><th>Sessions</th></tr></thead><tbody>{[...(primary.regimes?.year || []), ...(primary.regimes?.trend || [])].map(row => <tr key={row.group}><th scope="row">{row.group}</th><td>{pct(row.accuracy)}</td><td>{signed(row.meanIC)}</td><td>{num(row.sessions, 0)}</td></tr>)}</tbody></table></div></Panel></div>
+    <Panel title="Walk-forward model selection" subtitle={`${primary.selectionMetric}. ${primary.selectionAmendment || ''}`}><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Candidate</th><th>Mean IC</th><th>Mean accuracy</th><th>Mean log loss</th><th>Folds</th></tr></thead><tbody>{(primary.validation || []).map(v => <tr key={v.model} className={v.model === primary.selectedModel ? 'is-selected' : ''}><th scope="row">{v.model}</th><td>{signed(v.meanIC, 4)}</td><td>{pct(v.meanAccuracy)}</td><td>{num(v.meanLogLoss, 5)}</td><td>{v.folds?.length}</td></tr>)}</tbody></table></div><p className="pr-panel-body pr-small">Development {date(primary.development?.start)} – {date(primary.development?.end)}. A single model frozen at the end of development scored {pct(primary.holdoutFrozen?.accuracy)} accuracy and IC {signed(primary.holdoutFrozen?.ranking?.meanIC)} on the same unseen period.</p></Panel>
+    <Note><strong>News contribution: {result.newsAblation?.status || 'unavailable'}.</strong> {result.newsAblation?.reason}</Note>
+  </>;
+}
+
+function Evaluation({ result }) {
+  if (!result) return <Empty title="Evaluation is not available yet">The model report appears here after a completed historical training and evaluation run.</Empty>;
+  if (result.targets) return <RankEvaluation result={result} />;
+  const h = result.holdout || {}, b = result.backtest || {}, s = result.strongSignals || {};
+  const rows = [['Selected model', h], ['Training majority', result.baselines?.trainingMajority], ['20-session momentum', result.baselines?.momentum20], ['Logistic regression', result.baselines?.logistic]].filter(([, value]) => value);
+  return <>
+    <Note>{result.meets90PercentAccuracy ? 'The saved holdout reports at least 90% direction accuracy. Review sample size, baselines and uncertainty below.' : 'The saved holdout does not demonstrate 90% direction accuracy.'} {result.beatsMajorityAccuracy && result.beatsMajorityLogLoss ? 'The selected model beats the majority baseline on accuracy and log loss in this test.' : 'A consistent advantage over the majority baseline has not been demonstrated on both accuracy and log loss.'} These are experimental historical results.</Note>
+    <div className="pr-metrics"><Metric label="Unseen-period accuracy" value={pct(h.accuracy)} detail={`${num(h.samples, 0)} stock/date observations`} /><Metric label="Probability error · Brier" value={num(h.brier)} detail="Lower is better" /><Metric label="Log loss" value={num(h.logLoss)} detail="Lower is better" /><Metric label="ROC AUC" value={num(h.auc)} detail="0.5 is the no-discrimination reference" /></div>
+    <Panel title="Unseen-period comparison" subtitle={`${date(h.start)} – ${date(h.end)} · ${num(h.sessions, 0)} sessions · ${result.selectedModel || 'Model unavailable'}`}><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Method</th><th>Accuracy</th><th>Log loss</th><th>Brier score</th><th>AUC</th></tr></thead><tbody>{rows.map(([name, m]) => <tr key={name}><th scope="row">{name}</th><td>{pct(m.accuracy)}</td><td>{num(m.logLoss)}</td><td>{num(m.brier)}</td><td>{num(m.auc)}</td></tr>)}</tbody></table></div><p className="pr-panel-body pr-small">Positive outcomes: {pct(h.upRate)}. Accuracy interval: {pct(h.accuracyConfidenceInterval?.lower)} – {pct(h.accuracyConfidenceInterval?.upper)}. Stock/date observations can overlap and are not all independent; inspect the report limitations before interpreting this interval.</p></Panel>
+    <div className="pr-two-col"><Panel title="Training chronology" subtitle="Older data precedes evaluation"><Facts rows={[
+      ['Training', `${date(result.training?.start)} – ${date(result.training?.end)}`], ['Training observations', num(result.training?.samples, 0)], ['Calibration', `${date(result.calibration?.start)} – ${date(result.calibration?.end)}`], ['Calibration method', result.calibration?.method || 'Unavailable'], ['Calibration observations', num(result.calibration?.samples, 0)],
+    ]} /></Panel><Panel title="Stronger signals" subtitle={`Threshold: ${pct(s.threshold)} for either direction`}><Facts rows={[
+      ['Coverage', pct(s.coverage)], ['Up signals / precision', `${num(s.upSignals, 0)} / ${pct(s.upPrecision)}`], ['Down signals / precision', `${num(s.downSignals, 0)} / ${pct(s.downPrecision)}`],
+    ]} /><p className="pr-panel-body pr-small">Precision describes past signals in this test. It differs from an individual stock’s estimated probability.</p></Panel></div>
+    <Panel title="Walk-forward model selection" subtitle="Development results used to choose the candidate"><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Candidate</th><th>Mean accuracy</th><th>Mean log loss</th><th>Folds</th></tr></thead><tbody>{(result.validation || []).map(v => <tr key={v.model}><th scope="row">{v.model}</th><td>{pct(v.meanAccuracy)}</td><td>{num(v.meanLogLoss)}</td><td>{Array.isArray(v.folds) ? v.folds.length : num(v.folds, 0)}</td></tr>)}</tbody></table></div></Panel>
+    <Panel title="Historical simulation" subtitle="Next-session entry; non-overlapping holding cohorts"><div className="pr-metrics"><Metric label="Simulated total return" value={pct(b.totalReturn)} /><Metric label="Equal-universe comparison" value={pct(b.equalUniverseTotalReturn)} /><Metric label="Drawdown at cohort exits" value={pct(b.maxDrawdownAtCohortExits)} /><Metric label="Round-trip cost assumption" value={`${num(b.roundTripCostBps, 0)} bps`} /></div><p className="pr-panel-body pr-small">Cohort-exit drawdown can miss losses inside a holding period. This simulation is subject to liquidity, corporate-action and historical-data limitations; it is not an executed portfolio.</p></Panel>
+    <Note><strong>News contribution: {result.newsAblation?.status || 'unavailable'}.</strong> {result.newsAblation?.reason || 'No comparable, verified historical news experiment is available.'}</Note>
+  </>;
+}
 
 export default function AIPage() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const initialQuery = searchParams.get('q') || '';
-  const initialSymbol = searchParams.get('symbol') || 'NSE:TATAMOTORS';
-
-  // Active Desk Mode: 'agentic' (Agentic Alpha Lab) or 'chat' (Conversational Co-pilot)
-  const [activeMode, setActiveMode] = useState('agentic');
-
-  // Active Lab Sub-Tab: 'summary' | 'agents' | 'odds'
-  const [activeLabTab, setActiveLabTab] = useState('summary');
-
-  // Agentic Lab State
-  const [selectedSymbol, setSelectedSymbol] = useState(initialSymbol);
-  const [selectedStrategy, setSelectedStrategy] = useState('5yr-trend-alpha');
-  const [isAgentRunning, setIsAgentRunning] = useState(false);
-  const [agentResult, setAgentResult] = useState(null);
-
-  // Chat State
+  const [params, setParams] = useSearchParams();
+  const [tab, setTab] = useState(params.get('q') ? 'chat' : 'opportunities');
+  const [horizon, setHorizon] = useState(params.get('horizon') === '20' ? 20 : 5);
+  const [symbol, setSymbol] = useState(cleanSymbol(params.get('symbol')));
+  const [search, setSearch] = useState('');
   const [input, setInput] = useState('');
-  const [conversationId] = useState(() => `conv-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`);
-  const [messages, setMessages] = useState([
-    {
-      id: 'welcome',
-      role: 'assistant',
-      content: `### Market Pulse Autonomous Intelligence Desk
-
-Connected to live **NSE / BSE Market Telemetry**, **5-Year Historical ML Regime Engine**, and **Google Gemini 1.5 Flash**.
-
-**Autonomous Capabilities:**
-- **5-Year Trend ML Decomposer:** Analyzes 1,250 historical trading sessions, 200-DMA drift, and cyclical pattern correlations.
-- **Microstructure & Flow Agent:** Ingests real-time FII / DII institutional net blocks and options Put-Call Ratio (PCR).
-- **Parametric VaR & Kelly Sizing:** Computes 95% 1-Day Value-at-Risk, volatility risk envelope, and half-Kelly position sizes.
-
-Select **Autonomous Agentic Lab** above to execute multi-agent quantitative audits, or type below for real-time natural language synthesis.`,
-      timestamp: new Date().toISOString(),
-    },
-  ]);
-
-  const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
-
-  const chatMutation = useAIChat();
-  const agenticMutation = useAgenticAnalysis();
-
-  // Trigger initial agent run on mount
-  useEffect(() => {
-    runAgentAnalysis(selectedSymbol, selectedStrategy);
-  }, []);
-
-  const runAgentAnalysis = (symbolToRun, strategyToRun) => {
-    setIsAgentRunning(true);
-    agenticMutation.mutate(
-      {
-        symbol: symbolToRun || selectedSymbol,
-        strategy: strategyToRun || selectedStrategy,
-        timeframe: '5Y',
-      },
-      {
-        onSuccess: (data) => {
-          setAgentResult(data);
-          setIsAgentRunning(false);
-        },
-        onError: () => {
-          setIsAgentRunning(false);
-        },
-      }
-    );
+  const [messages, setMessages] = useState([]);
+  const [pending, setPending] = useState(false);
+  const [chatError, setChatError] = useState('');
+  const [retryPayload, setRetryPayload] = useState(null);
+  const searchRef = useRef(null), inputRef = useRef(null), endRef = useRef(null), pendingRef = useRef(false), initialQueryRef = useRef(''), controllerRef = useRef(null);
+  const status = useQuery({ queryKey: ['pulse-research-status'], queryFn: async ({ signal }) => (await api.get('/research/status', { signal })).data, staleTime: 30000, refetchInterval: 60000, retry: 1 });
+  const portfolio = usePortfolio();
+  const data = status.data, instruments = data?.collection?.instruments || [], stocks = instruments.filter(i => !i.benchmark);
+  const predictions = (data?.predictions?.predictions || []).filter(p => p.horizon === horizon);
+  const result = data?.report?.horizons?.find(h => h.horizon === horizon), current = predictions.find(p => p.symbol === symbol);
+  const ranked = predictions.some(p => Number.isFinite(p.peerRankPercentile));
+  const visible = predictions.filter(p => p.symbol.toLowerCase().includes(search.toLowerCase())).sort((a, b) => ranked ? b.peerRankPercentile - a.peerRankPercentile : b.probabilityUp - a.probabilityUp);
+  const primary = result?.targets?.[result.primaryTarget];
+  const events = data?.news?.events || [], positions = portfolio.data?.positions || [];
+  const valuesAvailable = positions.length > 0 && positions.every(p => Number.isFinite(p.currentValue) && p.currentValue >= 0);
+  const totalValue = valuesAvailable ? positions.reduce((sum, p) => sum + p.currentValue, 0) : null;
+  useEffect(() => () => controllerRef.current?.abort(), []);
+  useEffect(() => { if (!symbol && stocks.length) setSymbol(stocks[0].symbol); }, [stocks, symbol]);
+  useEffect(() => { if (tab === 'chat') endRef.current?.scrollIntoView({ block: 'nearest' }); }, [messages, pending, tab]);
+  const select = (nextSymbol, nextHorizon = horizon) => {
+    setSymbol(nextSymbol); setHorizon(nextHorizon);
+    setParams(previous => { const next = new URLSearchParams(previous); next.set('symbol', nextSymbol); next.set('horizon', String(nextHorizon)); return next; }, { replace: true });
   };
-
-  // Scroll to bottom in chat
-  useEffect(() => {
-    if (activeMode === 'chat') {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }
-  }, [messages, chatMutation.isPending, activeMode]);
-
-  // Handle pre-filled query param (?q=...)
-  useEffect(() => {
-    if (initialQuery && initialQuery.trim()) {
-      setActiveMode('chat');
-      handleSend(initialQuery.trim());
-    }
-  }, [initialQuery]);
-
-  const handleSend = (textToSend) => {
-    const text = (textToSend || input).trim();
-    if (!text || chatMutation.isPending) return;
-
-    const userMsg = {
-      id: `user-${Date.now()}`,
-      role: 'user',
-      content: text,
-      timestamp: new Date().toISOString(),
-    };
-
-    setMessages((prev) => [...prev, userMsg]);
-    setInput('');
-
-    chatMutation.mutate(
-      { message: text, conversationId },
-      {
-        onSuccess: (data) => {
-          const assistantMsg = {
-            id: `ai-${Date.now()}`,
-            role: 'assistant',
-            content: data.reply || 'Analysis completed.',
-            timestamp: data.timestamp || new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
-        },
-        onError: () => {
-          const errorMsg = {
-            id: `err-${Date.now()}`,
-            role: 'assistant',
-            content: 'Unable to communicate with the intelligence server. Verify API configuration and network connectivity.',
-            timestamp: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, errorMsg]);
-        },
-      }
-    );
+  const send = async (text, retry = null) => {
+    const question = (text || input).trim();
+    if (!question || question.length > 4000 || pendingRef.current) return;
+    let history = messages.filter(m => !m.failed).slice(-12).map(m => ({ role: m.role, content: m.content.slice(0, 2000) }));
+    while (history.reduce((n, m) => n + m.content.length, 0) > 8000) history.shift();
+    const payload = retry || { message: question, history, horizon, ...(symbol ? { symbol } : {}) };
+    if (!retry) setMessages(previous => [...previous, { role: 'user', content: question }]);
+    setInput(''); setChatError(''); setPending(true); pendingRef.current = true; setRetryPayload(payload); setTab('chat');
+    controllerRef.current = new AbortController();
+    try {
+      const response = (await api.post('/research/chat', payload, { timeout: 70000, signal: controllerRef.current.signal })).data;
+      setMessages(previous => [...previous, { role: 'assistant', content: response.reply, provider: response.provider, evidence: response.evidence, warning: response.warning, failed: response.provider !== 'gemini' }]);
+      if (response.provider !== 'gemini') setChatError(response.warning || 'A verified AI interpretation is currently unavailable. Retry when the provider is available.');
+      else setRetryPayload(null);
+    } catch (error) { if (error.code !== 'ERR_CANCELED') setChatError(error.response?.data?.error || 'The research assistant could not be reached. Your question is saved; retry the request.'); }
+    finally { setPending(false); pendingRef.current = false; }
   };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSend();
-    }
+  useEffect(() => { const q = params.get('q')?.trim(); if (q && q !== initialQueryRef.current && !pendingRef.current) { initialQueryRef.current = q; send(q); } }, [params]);
+  const discussPortfolio = () => {
+    const holdings = positions.map(p => `${p.symbol}: ${p.quantity} shares${Number.isFinite(p.currentValue) ? `, provided market value INR ${p.currentValue.toFixed(2)}` : ', current value unavailable'}`).join('; ');
+    setInput(`Review concentration, model coverage and risks for my paper portfolio: ${holdings}. Ask about my investment horizon and risk tolerance before suggesting a strategy.`.slice(0, 4000));
+    setTab('chat'); setTimeout(() => inputRef.current?.focus(), 0);
   };
-
-  return (
-    <ErrorBoundary>
-      <div className="ai-page" style={{ display: 'flex', flexDirection: 'column', minHeight: 'calc(100vh - 56px)', backgroundColor: 'var(--background)', position: 'relative' }}>
-        {/* Top Intelligence Header */}
-        <div className="ai-header" style={{ padding: '14px 28px', borderBottom: '1px solid var(--border)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-            <div style={{ position: 'relative' }}>
-              <img
-                src="/pulse_ai_core.jpg"
-                alt="Pulse AI Core"
-                style={{
-                  width: '42px',
-                  height: '42px',
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  border: '2px solid rgba(59, 130, 246, 0.6)',
-                  boxShadow: 'none',
-                }}
-              />
-              <span
-                style={{
-                  position: 'absolute',
-                  bottom: '0px',
-                  right: '0px',
-                  width: '10px',
-                  height: '10px',
-                  borderRadius: '50%',
-                  backgroundColor: 'var(--positive)',
-                  border: '2px solid #000',
-                }}
-              />
-            </div>
-
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{ fontSize: '17px', fontWeight: 800, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-                  Pulse AI — Smart Market Assistant
-                </span>
-                <span className="badge badge--positive" style={{ fontSize: '10px' }}>
-                  3 AI SPECIALISTS WORKING
-                </span>
-                <span className="badge badge--accent" style={{ fontSize: '10px' }}>
-                  5-YEAR MARKET HISTORY CHECK
-                </span>
-                <span className="badge badge--neutral" style={{ fontSize: '10px', color: 'var(--accent-bright)', borderColor: 'rgba(168, 85, 247, 0.4)' }}>
-                  AUTOMATED SAFETY CHECKS
-                </span>
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                3 specialized AI agents reviewing 5 years of market history, big institution buying, and safety risk boundaries to help you make smarter decisions.
-              </div>
-            </div>
-          </div>
-
-          {/* Mode Navigation Pills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px' }}>
-            <button
-              type="button"
-              onClick={() => setActiveMode('agentic')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: activeMode === 'agentic' ? 'rgba(59, 130, 246, 0.2)' : 'var(--surface)',
-                border: `1px solid ${activeMode === 'agentic' ? 'var(--accent)' : 'var(--border)'}`,
-                color: activeMode === 'agentic' ? 'var(--accent-bright)' : 'var(--text-secondary)',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <Zap size={14} color="var(--accent-bright)" />
-              <span>Autonomous Agentic Lab</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveMode('chat')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                padding: '7px 14px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: activeMode === 'chat' ? 'rgba(59, 130, 246, 0.2)' : 'var(--surface)',
-                border: `1px solid ${activeMode === 'chat' ? 'var(--accent)' : 'var(--border)'}`,
-                color: activeMode === 'chat' ? 'var(--accent-bright)' : 'var(--text-secondary)',
-                fontSize: '12px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                transition: 'all 0.15s ease',
-              }}
-            >
-              <Terminal size={14} color="var(--accent-bright)" />
-              <span>Conversational Co-pilot</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ========================================================================= */}
-        {/* MODE 1: AUTONOMOUS AGENTIC ALPHA LAB (MULTI-AGENT QUANT & 5-YEAR ML)      */}
-        {/* ========================================================================= */}
-        {activeMode === 'agentic' && (
-          <div className="page-container-wide ai-page" style={{ padding: '24px 28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
-            {/* Strategy Selection & Stock Picker Bar */}
-            <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Sparkles size={16} color="var(--accent-bright)" />
-                  <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Autonomous Strategy Presets
-                  </span>
-                </div>
-
-                {/* Stock Selector Chips */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                    Target Stock:
-                  </span>
-                  {['NSE:TATAMOTORS', 'NSE:TATASTEEL', 'NSE:RELIANCE', 'NSE:TCS', 'NSE:HDFCBANK', 'NSE:INFY'].map((sym) => {
-                    const isSel = sym === selectedSymbol;
-                    return (
-                      <button
-                        key={sym}
-                        type="button"
-                        onClick={() => {
-                          setSelectedSymbol(sym);
-                          runAgentAnalysis(sym, selectedStrategy);
-                        }}
-                        className={`quick-select-chip ${isSel ? 'quick-select-chip--active' : ''}`}
-                        style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '5px' }}
-                      >
-                        <CompanyLogo symbol={sym.replace('NSE:', '')} size={16} />
-                        <span>{sym.replace('NSE:', '')}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Preset Cards Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: '12px' }}>
-                {STRATEGY_PRESETS.map((preset) => {
-                  const Icon = preset.icon;
-                  const isSelected = selectedStrategy === preset.id;
-                  return (
-                    <div
-                      key={preset.id}
-                      onClick={() => {
-                        setSelectedStrategy(preset.id);
-                        runAgentAnalysis(selectedSymbol, preset.id);
-                      }}
-                      style={{
-                        padding: '14px 16px',
-                        borderRadius: 'var(--radius-sm)',
-                        backgroundColor: isSelected ? 'rgba(59, 130, 246, 0.12)' : 'var(--surface)',
-                        border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border)'}`,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '6px',
-                        transition: 'all 0.2s ease',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <div
-                            style={{
-                              width: '28px',
-                              height: '28px',
-                              borderRadius: 'var(--radius-xs)',
-                              backgroundColor: `${preset.color}20`,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                            }}
-                          >
-                            <Icon size={15} color={preset.color} />
-                          </div>
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                            {preset.name}
-                          </span>
-                        </div>
-                        <span className="badge badge--accent" style={{ fontSize: '9px', padding: '1px 6px' }}>
-                          {preset.badge}
-                        </span>
-                      </div>
-                      <p style={{ fontSize: '11.5px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.4 }}>
-                        {preset.desc}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Rerun Button */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Selected Instrument: <strong style={{ color: 'var(--text-primary)' }}>{selectedSymbol}</strong> | Strategy: <strong style={{ color: 'var(--accent-bright)' }}>{selectedStrategy}</strong>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => runAgentAnalysis(selectedSymbol, selectedStrategy)}
-                  disabled={isAgentRunning}
-                  className="btn btn-primary"
-                  style={{ padding: '8px 18px', fontSize: '12.5px', gap: '8px' }}
-                >
-                  <RefreshCw size={13} className={isAgentRunning ? 'animate-spin' : ''} />
-                  <span>{isAgentRunning ? 'Reviewing 5-Year History...' : 'Rerun AI Audit'}</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Live User-Friendly 5-Year Market Metric Ribbon */}
-            {agentResult && (
-              <div className="ai-metrics-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 170px), 1fr))', gap: '12px' }}>
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    5-Year Growth Rate
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--positive)' }}>
-                    {agentResult.directive.fiveYearCAGR}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Average annual growth</span>
-                </div>
-
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Long-Term Trend
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent-bright)' }}>
-                    {agentResult.directive.hurstExponent || 'Strong Uptrend'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Trading safely above 200-day line</span>
-                </div>
-
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Chance of Success
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--positive)' }}>
-                    {agentResult.directive.mcTargetHitProb || '78%'} High Odds
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Probability of reaching target</span>
-                </div>
-
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Big Money Action
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--accent-bright)' }}>
-                    Heavy Buying
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>+₹3,953 Cr institutional buying</span>
-                </div>
-
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Daily Price Buffer
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    {agentResult.directive.var95 || '₹9.25'}
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Normal daily price fluctuation</span>
-                </div>
-
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '10.5px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                    Data Evaluated
-                  </span>
-                  <span className="num-tabular" style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    1,250 Days
-                  </span>
-                  <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>5-Year complete history</span>
-                </div>
-              </div>
-            )}
-
-            {/* 2-Column Workstation */}
-            {agentResult && (
-              <div className="terminal-panel-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '20px', alignItems: 'start' }}>
-                {/* Left: Interactive Tabs (Summary | 3 Specialists | Chances & Safety) */}
-                <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  {/* Tab Selector */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                      <button
-                        id="tab-btn-summary"
-                        type="button"
-                        onClick={() => setActiveLabTab('summary')}
-                        className={`tab-pill ${activeLabTab === 'summary' ? 'tab-pill--active' : ''}`}
-                        style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        <FileText size={13} />
-                        <span>Summary</span>
-                      </button>
-
-                      <button
-                        id="tab-btn-agents"
-                        type="button"
-                        onClick={() => setActiveLabTab('agents')}
-                        className={`tab-pill ${activeLabTab === 'agents' ? 'tab-pill--active' : ''}`}
-                        style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        <Bot size={13} />
-                        <span>How AI Analyzed It</span>
-                      </button>
-
-                      <button
-                        id="tab-btn-odds"
-                        type="button"
-                        onClick={() => setActiveLabTab('odds')}
-                        className={`tab-pill ${activeLabTab === 'odds' ? 'tab-pill--active' : ''}`}
-                        style={{ fontSize: '12px', padding: '6px 14px', display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 600, cursor: 'pointer' }}
-                      >
-                        <Target size={13} />
-                        <span>Chances &amp; Safety Rules</span>
-                      </button>
-                    </div>
-
-                    <span className="badge badge--positive" style={{ fontSize: '10px' }}>
-                      3 AI EXPERTS WORKING
-                    </span>
-                  </div>
-
-                  {/* TAB 1: PLAIN ENGLISH SUMMARY (CRYSTAL CLEAR FOR ANY USER) */}
-                  {activeLabTab === 'summary' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <div style={{ padding: '14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <CheckCircle2 size={15} color="var(--positive)" />
-                          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--positive)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            The AI Verdict: Good Time to Buy &amp; Accumulate
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '13px', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                          {agentResult.executiveDossier?.whySelectedNow || `${agentResult.directive.ticker} has delivered solid growth over the last 5 years. Right now, major mutual funds and institutional buyers are actively investing, and the stock is trading comfortably in a healthy upward trend.`}
-                        </p>
-                      </div>
-
-                      <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                        <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Primary Profit Goal
-                          </div>
-                          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-                            ₹{formatIndianNumber(agentResult.directive.target1)}
-                          </div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                            Good place to sell half your shares and lock in profits.
-                          </div>
-                        </div>
-
-                        <div style={{ padding: '12px 14px', borderRadius: 'var(--radius-xs)', backgroundColor: 'var(--surface)', border: '1px solid var(--border-subtle)' }}>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-                            Safety Stop-Loss (Exit Line)
-                          </div>
-                          <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--negative)', fontFamily: 'var(--font-mono)', marginTop: '4px' }}>
-                            ₹{formatIndianNumber(agentResult.directive.stopLoss)}
-                          </div>
-                          <div style={{ fontSize: '11.5px', color: 'var(--text-secondary)', marginTop: '3px' }}>
-                            If price drops here, exit immediately to stay safe.
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ padding: '14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(59, 130, 246, 0.08)', border: '1px solid rgba(59, 130, 246, 0.25)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '6px' }}>
-                          <ShieldCheck size={15} color="var(--accent-bright)" />
-                          <span style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--accent-bright)', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-                            How Much Money Should You Put In?
-                          </span>
-                        </div>
-                        <p style={{ fontSize: '12.5px', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                          To keep your risk safe and never worry, <strong>never put all your money in one stock</strong>. Our risk rule recommends investing no more than <strong>10% to 12% of your total trading cash</strong> into this purchase.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 2: WHAT THE 3 AI SPECIALISTS DID */}
-                  {activeLabTab === 'agents' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {agentResult.reasoningTrace.map((step) => (
-                        <div
-                          key={step.step}
-                          style={{
-                            padding: '14px',
-                            borderRadius: 'var(--radius-sm)',
-                            backgroundColor: 'var(--surface)',
-                            border: '1px solid var(--border-subtle)',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: '8px',
-                          }}
-                        >
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span
-                                style={{
-                                  width: '24px',
-                                  height: '24px',
-                                  borderRadius: '50%',
-                                  backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                                  color: 'var(--accent-bright)',
-                                  fontSize: '11px',
-                                  fontWeight: 700,
-                                  display: 'flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                }}
-                              >
-                                {step.step}
-                              </span>
-                              <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                                {step.agent}
-                              </span>
-                            </div>
-                            <span className="badge badge--live" style={{ fontSize: '9.5px' }}>
-                              AUDIT COMPLETE
-                            </span>
-                          </div>
-
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.4 }}>
-                            <strong style={{ color: 'var(--text-muted)' }}>WHAT IT CHECKED:</strong> {step.thought}
-                          </div>
-
-                          <div
-                            style={{
-                              padding: '10px 12px',
-                              borderRadius: 'var(--radius-xs)',
-                              backgroundColor: 'rgba(59, 130, 246, 0.08)',
-                              borderLeft: '3px solid var(--accent)',
-                              fontSize: '12.5px',
-                              color: 'var(--text-primary)',
-                              lineHeight: 1.5,
-                            }}
-                          >
-                            <strong style={{ color: 'var(--accent-bright)' }}>WHAT IT FOUND:</strong> {step.observation}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* TAB 3: CHANCES & SAFETY RULES */}
-                  {activeLabTab === 'odds' && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                      <div style={{ fontSize: '12.5px', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                        We ran <strong>10,000 future scenario tests</strong> based on how this stock behaved over the last 5 years:
-                      </div>
-
-                      {/* Visual Probability Gauges */}
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '5px' }}>
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Chance of Reaching Profit Target</span>
-                            <span style={{ color: 'var(--positive)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{agentResult.mlFactors.target1HitProbability || '78%'} High Probability</span>
-                          </div>
-                          <div style={{ height: '10px', backgroundColor: 'var(--card-hover)', borderRadius: '5px', overflow: 'hidden' }}>
-                            <div style={{ width: agentResult.mlFactors.target1HitProbability || '78%', height: '100%', backgroundColor: 'var(--positive)', borderRadius: '5px' }} />
-                          </div>
-                        </div>
-
-                        <div>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', marginBottom: '5px' }}>
-                            <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>Risk of Dropping to Stop-Loss</span>
-                            <span style={{ color: 'var(--negative)', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{agentResult.mlFactors.stopLossBreachProbability || '11%'} Low Risk</span>
-                          </div>
-                          <div style={{ height: '10px', backgroundColor: 'var(--card-hover)', borderRadius: '5px', overflow: 'hidden' }}>
-                            <div style={{ width: agentResult.mlFactors.stopLossBreachProbability || '11%', height: '100%', backgroundColor: 'var(--negative)', borderRadius: '5px' }} />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ padding: '14px', backgroundColor: 'var(--surface)', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-subtle)', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        <div style={{ fontSize: '12.5px', fontWeight: 700, color: 'var(--text-primary)', textTransform: 'uppercase' }}>
-                          3 Golden Rules to Protect Your Money
-                        </div>
-                        <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-                          <li><strong>Always use the Stop Loss:</strong> If the price touches ₹{formatIndianNumber(agentResult.directive.stopLoss)}, exit immediately. Never hold a falling stock hoping it bounces.</li>
-                          <li><strong>Don't put all eggs in one basket:</strong> Keep your investment under 10% to 12% of your account so one bad day can never hurt you.</li>
-                          <li><strong>Lock in profits:</strong> When the price reaches Target 1 (₹{formatIndianNumber(agentResult.directive.target1)}), sell half your shares to secure guaranteed profits!</li>
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Right: User-Friendly Action Directive Card */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                  <div
-                    className="card card-padded"
-                    style={{
-                      background: 'var(--surface)',
-                      border: '1px solid rgba(16, 185, 129, 0.35)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '14px',
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <CompanyLogo symbol={selectedSymbol.replace('NSE:', '')} size={36} />
-                        <div>
-                          <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--text-primary)' }}>
-                            {agentResult.directive.ticker}
-                          </div>
-                          <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                            {agentResult.directive.companyName}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div style={{ textAlign: 'right' }}>
-                        <span className="badge badge--positive" style={{ fontSize: '12px', padding: '3px 8px', fontWeight: 700 }}>
-                          {agentResult.directive.action}
-                        </span>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                          Confidence: <strong style={{ color: 'var(--positive)' }}>{agentResult.directive.conviction}</strong>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Target and Stop Loss Levels */}
-                    <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', backgroundColor: 'var(--surface)', padding: '12px', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border)' }}>
-                      <div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Target 1 (Primary Goal)</div>
-                        <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--positive)' }}>
-                          ₹{formatIndianNumber(agentResult.directive.target1)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Target 2 (Bonus Goal)</div>
-                        <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--accent-bright)' }}>
-                          ₹{formatIndianNumber(agentResult.directive.target2)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Safety Stop-Loss</div>
-                        <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--negative)' }}>
-                          ₹{formatIndianNumber(agentResult.directive.stopLoss)}
-                        </div>
-                      </div>
-
-                      <div>
-                        <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>Potential Reward</div>
-                        <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          3.4x Reward vs Risk
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Simple Safe Budget Advice */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', borderTop: '1px solid var(--border-subtle)', paddingTop: '10px', fontSize: '12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
-                        <span>Safe Account Limit:</span>
-                        <strong style={{ color: 'var(--text-primary)' }}>Max 10% -- 12% of Cash</strong>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', color: 'var(--text-secondary)' }}>
-                        <span>Holding Recommendation:</span>
-                        <strong style={{ color: 'var(--positive)' }}>Delivery (CNC) or Intraday</strong>
-                      </div>
-                    </div>
-
-                    {/* One-Click Deploy to Trading Desk */}
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/trade?symbol=${encodeURIComponent(agentResult.symbol)}`)}
-                      className="btn btn-buy"
-                      style={{ width: '100%', padding: '12px', fontSize: '13.5px', fontWeight: 700, letterSpacing: '0.01em', gap: '8px' }}
-                    >
-                      <Zap size={16} />
-                      <span>Deploy to Paper Trading Terminal &rarr;</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* MODE 2: CONVERSATIONAL CO-PILOT CHAT DESK                                 */}
-        {/* ========================================================================= */}
-        {activeMode === 'chat' && (
-          <div className="ai-chat-desk" style={{ display: 'flex', flexDirection: 'column', flex: 1, height: 'calc(100vh - 120px)' }}>
-            {/* Research Message Thread */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '24px', maxWidth: '1000px', width: '100%', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {messages.map((m) => {
-                const isUser = m.role === 'user';
-                return (
-                  <div
-                    key={m.id}
-                    className="animate-slide-up"
-                    style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', alignSelf: isUser ? 'flex-end' : 'flex-start', maxWidth: isUser ? '75%' : '90%' }}
-                  >
-                    {!isUser && (
-                      <img
-                        src="/pulse_ai_core.jpg"
-                        alt="AI"
-                        style={{
-                          width: '28px',
-                          height: '28px',
-                          borderRadius: '50%',
-                          objectFit: 'cover',
-                          border: '1px solid rgba(59, 130, 246, 0.5)',
-                          boxShadow: 'none',
-                          marginTop: '2px',
-                          flexShrink: 0,
-                        }}
-                      />
-                    )}
-
-                    <div className={`ai-message-bubble ${isUser ? 'ai-message-bubble--user' : 'ai-message-bubble--assistant'}`}>
-                      {isUser ? (
-                        m.content
-                      ) : (
-                        <div className="markdown-body">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {m.content}
-                          </ReactMarkdown>
-                        </div>
-                      )}
-                    </div>
-
-                    {isUser && (
-                      <div className="ai-avatar" style={{ marginTop: '2px', color: 'var(--text-secondary)' }}>
-                        <User size={14} />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* Processing indicator */}
-              {chatMutation.isPending && (
-                <div className="ai-processing animate-fade-in">
-                  <div className="ai-avatar">
-                    <Cpu size={14} />
-                  </div>
-                  <div style={{ padding: '10px 16px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--card)', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--accent)', fontSize: 'var(--text-sm)' }}>
-                    <span className="ai-processing-dot" />
-                    <span>Synthesizing live Indian market telemetry &amp; 5-yr ML factors...</span>
-                  </div>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Suggestion Chips */}
-            <div style={{ padding: '4px 24px 8px', maxWidth: '1000px', width: '100%', margin: '0 auto', display: 'flex', gap: '8px', overflowX: 'auto', scrollbarWidth: 'thin' }}>
-              {SUGGESTIONS.map((s) => (
-                <button
-                  key={s}
-                  className="ai-suggestion-chip"
-                  onClick={() => handleSend(s)}
-                  style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-
-            {/* Input Bar */}
-            <div className="ai-input-bar">
-              <div className="ai-input-wrapper">
-                <Terminal size={15} color="var(--text-muted)" />
-                <input
-                  ref={inputRef}
-                  type="text"
-                  className="ai-input"
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Query ticker (e.g. RELIANCE), 5-yr trend cycle, or macroeconomic policy..."
-                />
-                <button
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || chatMutation.isPending}
-                  className={`btn ai-send-btn ${input.trim() && !chatMutation.isPending ? 'ai-send-btn--active' : 'ai-send-btn--disabled'}`}
-                >
-                  <span>Send</span>
-                  <Send size={13} />
-                </button>
-              </div>
-              <div style={{ maxWidth: '1000px', margin: '6px auto 0', display: 'flex', justifyContent: 'space-between', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  <ShieldCheck size={12} />
-                  AI syntheses are informational and do not constitute registered investment advice.
-                </span>
-                <span>Press Enter to send</span>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </ErrorBoundary>
-  );
+  return <ErrorBoundary><div className="pulse-research page-container-wide">
+    <header className="pr-heading"><div><div className="pr-eyebrow">MARKET PULSE / RESEARCH</div><h1>Pulse AI</h1><p>Measured stock outlooks. Traceable news. Research you can question.</p></div><button className="btn btn-secondary" type="button" disabled={status.isFetching} onClick={() => status.refetch()}><RefreshCw size={15} className={status.isFetching ? 'pr-spinning' : ''} />Refresh results</button></header>
+    <div className="pr-status-strip"><span><i className={data?.report ? 'pr-status-dot' : 'pr-status-dot pr-status-dot--muted'} />{data?.report ? 'Experimental model' : 'Awaiting model results'}</span><span>{stocks.length} stocks in collection</span><span>Results saved {date(data?.report?.generatedAt)}</span><span>{data?.stale ? 'Market data needs updating' : data ? 'Historical daily data' : 'Connecting to research service'}</span></div>
+    <nav className="pr-tabs" aria-label="Pulse research views">{tabs.map(([id, title, Icon]) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setTab(id)}><Icon size={16} />{title}</button>)}</nav>
+    <div className="pr-toolbar"><label>Prediction horizon<select value={horizon} onChange={e => select(symbol, Number(e.target.value))}><option value={5}>5 trading sessions</option><option value={20}>20 trading sessions</option></select></label><label>Research stock<select value={symbol} onChange={e => select(e.target.value)}><option value="">Select stock</option>{symbol && !stocks.some(s => s.symbol === symbol) && <option value={symbol}>{symbol} · outside collection</option>}{stocks.map(s => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}</select></label><p>Outcome measured from the next session’s open to the horizon close.</p></div>
+    {status.isPending && <div className="pr-loading" role="status">Loading saved model evidence and source records…</div>}
+    {status.isError && <Note error>Research results could not be loaded. {status.error?.response?.data?.error || 'Check the local server connection and use Refresh results.'}</Note>}
+    {data?.stale && <Note>Historical prices are stale or unavailable. Read the “as of” date before using a saved outlook; refreshing this page reloads saved results and does not retrain the model.</Note>}
+    {tab === 'opportunities' && <div className="pr-content">{primary ? <Note><strong>{evidenceText[primary.rankingEvidence] || 'Evidence status unavailable'}.</strong> Stocks are ranked by the model’s estimated probability of beating the same-date median of {num(predictions.length, 0)} covered stocks over {horizon} sessions. Unseen-period accuracy was {pct(primary.holdout.accuracy)} with mean rank IC {signed(primary.holdout.ranking?.meanIC)}: treat rankings as weak research leads, not trade instructions.</Note> : <Note><strong>Research estimates, not trade instructions.</strong> A model’s estimated probability differs from its historical accuracy. Review unseen-period evidence before treating a ranking as useful.</Note>}<div className="pr-outlook-grid"><Panel title="Stock outlook" subtitle={ranked ? `${horizon}-session horizon · ranked by probability of beating peers` : `${horizon}-session horizon · ranked by estimated probability of a positive return`} action={<div className="pr-search"><Search size={15} /><input ref={searchRef} aria-label="Search outlook stocks" placeholder="Find a stock" value={search} onChange={e => setSearch(e.target.value)} />{search && <button type="button" aria-label="Clear stock search" onClick={() => { setSearch(''); searchRef.current?.focus(); }}><X size={15} /></button>}</div>}>
+      {!predictions.length ? <Empty title="No saved predictions">Complete a historical model run to generate stock outlooks. No substitute predictions are shown.</Empty> : !visible.length ? <Empty title="No matching stocks">Clear the search or try a symbol in the collection.</Empty> : <div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Stock</th>{ranked && <th>Sector</th>}<th>{ranked ? 'Beat peers' : 'Probability up'}</th>{ranked && <th>Beat NIFTY</th>}<th>{ranked ? 'Model tier' : 'Signal'}</th><th>As of</th></tr></thead><tbody>{visible.map(p => <tr key={p.symbol} className={symbol === p.symbol ? 'is-selected' : ''}><th scope="row"><button type="button" className="pr-stock-button" onClick={() => select(p.symbol)}><CompanyLogo symbol={p.symbol} size={24} />{p.symbol}</button></th>{ranked && <td>{p.sector || '—'}</td>}<td>{pct(ranked ? p.probabilityOutperformPeers : p.probabilityUp)}</td>{ranked && <td>{pct(p.probabilityBeatNifty)}</td>}<td><span className={`pr-signal pr-signal--${p.signal}`}>{ranked ? (p.tier === 'top quintile' ? 'Top quintile' : p.tier === 'bottom quintile' ? 'Bottom quintile' : 'Middle') : p.signal === 'up' ? 'Up signal' : p.signal === 'down' ? 'Down signal' : 'Uncertain'}</span></td><td>{date(p.asOf)}</td></tr>)}</tbody></table></div>}</Panel>
+      <Panel title={symbol || 'Stock detail'} subtitle="Estimate and supporting context">{current ? <>{ranked ? <div className="pr-probability"><span>Estimated probability of beating the peer median</span><strong>{pct(current.probabilityOutperformPeers)}</strong><div className="pr-probability-track" aria-hidden="true"><div style={{ width: `${Math.max(0, Math.min(100, current.peerRankPercentile * 100))}%` }} /></div><small>Ranked above {pct(current.peerRankPercentile)} of covered stocks · {horizon} trading sessions · as of {date(current.asOf)}</small></div> : <div className="pr-probability"><span>Estimated probability of a positive return</span><strong>{pct(current.probabilityUp)}</strong><div className="pr-probability-track" aria-hidden="true"><div style={{ width: `${Math.max(0, Math.min(100, current.probabilityUp * 100))}%` }} /></div><small>{horizon} trading sessions · as of {date(current.asOf)}</small></div>}<Facts rows={[
+        ...(ranked ? [['Beat NIFTY 50', pct(current.probabilityBeatNifty)], ['Positive return', pct(current.probabilityUp)], ['Sector', current.sector || 'Unavailable']] : []),
+        ['Model', current.model], ['Trained through', date(current.trainedThrough)], ['Calibrated through', date(current.calibratedThrough)], ['Unseen-period accuracy', pct(primary?.holdout?.accuracy ?? result?.holdout?.accuracy)],
+      ]} />{current.drivers?.length > 0 && <div className="pr-panel-body"><h3 className="pr-small">What the linear companion model weighs most</h3><ul className="pr-limitations">{current.drivers.map(d => <li key={d.feature}><strong>{d.label}</strong> {d.direction} the outlook · {pct(d.percentile)} percentile among covered stocks</li>)}</ul><p className="pr-small">Drivers are an approximation from a logistic model trained on the same data, not a causal explanation. Check catalysts, results and news before drawing conclusions.</p></div>}<div className="pr-panel-body pr-actions"><button type="button" className="btn btn-primary" disabled={pending} onClick={() => send(`Explain the saved ${horizon}-session outlook for ${symbol}: its drivers, counterarguments, risks and how reliable the model has been on unseen data.`)}>Discuss this outlook<ArrowUpRight size={14} /></button><Link className="btn btn-secondary" to={`/stocks/${encodeURIComponent(`NSE:${symbol}`)}`}>Open stock details</Link><Link className="btn btn-secondary" to={`/trade?symbol=${encodeURIComponent(`NSE:${symbol}`)}`}>Open paper trading</Link></div>{current.features && <details className="pr-details"><summary>Model input snapshot</summary><Facts rows={Object.entries(current.features).map(([key, value]) => [key.replaceAll('_', ' '), typeof value === 'number' ? num(value, 4) : readable(value)])} /></details>}</> : <Empty title="No estimate for this stock">Select a covered stock. Stocks outside the trained universe do not have a saved prediction.</Empty>}</Panel></div></div>}
+    {tab === 'evidence' && <div className="pr-content"><Evaluation result={result} /><Panel title="Data coverage and limitations" subtitle={`Model version: ${data?.report?.modelVersion || 'Unavailable'}`}><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Instrument</th><th>Exchange / role</th><th>Candles</th><th>First date</th><th>Last date</th></tr></thead><tbody>{instruments.map(i => <tr key={i.symbol}><th scope="row">{i.symbol}</th><td>{i.exchange || 'Unavailable'}{i.benchmark ? ' · benchmark' : ''}</td><td>{num(i.rows, 0)}</td><td>{date(i.firstDate)}</td><td>{date(i.lastDate)}</td></tr>)}</tbody></table></div><ul className="pr-limitations">{[...(data?.collection?.limitations || []), ...(data?.report?.limitations || [])].map((l, i) => <li key={i}>{readable(l)}</li>)}</ul>{data?.report?.exclusions && <details className="pr-details"><summary>Excluded instruments and observations</summary><pre>{JSON.stringify(data.report.exclusions, null, 2)}</pre></details>}</Panel></div>}
+    {tab === 'news' && <div className="pr-content"><Note><strong>Historical availability is checked separately from publication time.</strong> A disclosure collected today is not assumed to have been in our dataset in the past. Modern Gemini classifications are excluded from historical model training.</Note><Panel title="Source ledger" subtitle={`${events.length} saved records · original publication and first observation remain separate`}>{events.length ? <div className="pr-news-list">{events.map((event, i) => <article key={`${event.sourceId}-${event.version}-${i}`}><div className="pr-news-meta"><span>{event.sourceId}</span><span>{event.sourceType}</span><span>{event.archiveVerified ? 'Archive evidence verified' : 'Historical archive unverified'}</span></div><h3>{safeUrl(event.sourceUrl) ? <a href={event.sourceUrl} target="_blank" rel="noopener noreferrer">{event.title}<ArrowUpRight size={14} /></a> : event.title}</h3>{event.excerpt && <p>{event.excerpt}</p>}<div className="pr-news-meta"><span>Published {date(event.publishedAt)}</span><span>First seen {date(event.firstSeenAt)}</span><span>Eligible from {date(event.availableAt)}</span>{event.author && <span>By {event.author}</span>}</div><div className="pr-news-meta"><span>{event.symbols?.join(', ') || 'Market-wide'}</span>{event.classification?.topic && <span>{event.classification.topic}</span>}<span>Version {event.version}</span></div></article>)}</div> : <Empty title="No verified source records yet">The ledger will show collected announcements with provenance. Historical news value cannot be measured until comparable, time-valid coverage exists.</Empty>}</Panel><ul className="pr-limitations">{(data?.news?.limitations || []).map((l, i) => <li key={i}>{readable(l)}</li>)}</ul></div>}
+    {tab === 'portfolio' && <div className="pr-content"><Panel title="Your paper portfolio" subtitle="Review concentration and research coverage before discussing a strategy" action={<Link className="btn btn-secondary" to="/portfolio">Open portfolio<ArrowUpRight size={14} /></Link>}>{portfolio.isPending ? <div className="pr-loading" role="status">Loading your paper positions…</div> : portfolio.isError ? <div className="pr-panel-body"><Note error>Portfolio data could not be loaded.</Note><button type="button" className="btn btn-secondary" onClick={() => portfolio.refetch()}>Retry portfolio</button></div> : !positions.length ? <Empty title="No open paper positions">Your existing paper holdings will appear here when available. You can still discuss a hypothetical allocation in Research chat.</Empty> : <><div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Holding</th><th>Quantity</th><th>Provided current value</th><th>Weight in holdings</th><th>Model coverage</th></tr></thead><tbody>{positions.map(p => <tr key={p.symbol}><th scope="row">{p.symbol}</th><td>{num(p.quantity, 0)}</td><td>{Number.isFinite(p.currentValue) ? `₹${num(p.currentValue, 2)}` : 'Unavailable'}</td><td>{totalValue > 0 ? pct(p.currentValue / totalValue) : 'Unavailable'}</td><td>{predictions.some(x => x.symbol === cleanSymbol(p.symbol)) ? 'Covered' : 'Outside trained universe'}</td></tr>)}</tbody></table></div><div className="pr-panel-body"><p className="pr-small">Weights exclude cash and use only the portfolio service’s provided current values. These are simulated holdings. Strategy discussion does not execute trades.</p><button type="button" className="btn btn-primary" onClick={discussPortfolio}>Prepare portfolio discussion<ArrowUpRight size={14} /></button></div></>}</Panel></div>}
+    {tab === 'chat' && <section className="pr-chat pr-panel"><header className="pr-panel-heading"><div><h2>Research conversation</h2><p>Gemini interprets supplied evidence. Statistical probabilities come from the saved model.</p></div><span className="pr-small">{data?.gemini?.configured ? 'Provider configured · availability checked on request' : 'Provider configuration unavailable'}</span></header><div className="pr-chat-messages" aria-live="polite">{!messages.length && <Empty title="Start with the evidence">Ask what drives a stock’s outlook, compare the model with its baseline, or discuss your portfolio’s concentration.</Empty>}{messages.map((message, index) => <article key={index} className={`pr-message pr-message--${message.role}`}><div className="pr-message-label">{message.role === 'user' ? 'You' : message.provider === 'gemini' ? 'Gemini · interpretation' : 'Research service'}</div><div className="markdown-body"><ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown></div>{message.warning && <p className="pr-small">{message.warning}</p>}{message.evidence?.length > 0 && <details className="pr-details"><summary>Evidence supplied to this answer ({message.evidence.length})</summary><ul>{message.evidence.map(e => <li key={e.id}><strong>{e.id}</strong> · {e.title || e.type}{safeUrl(e.url) && <> · <a href={e.url} target="_blank" rel="noopener noreferrer">Original source</a></>}</li>)}</ul></details>}</article>)}{pending && <div className="pr-small" role="status">Reading the saved evidence and preparing an interpretation…</div>}<div ref={endRef} /></div><div className="pr-chat-composer">{chatError && <Note error>{chatError} {retryPayload && <button type="button" className="btn btn-secondary" disabled={pending} onClick={() => send(retryPayload.message, retryPayload)}>Retry answer</button>}</Note>}<div className="pr-prompts">{['Which stocks rank highest right now, and why?', 'Does this model beat its baseline on unseen data?', 'Why can’t the model reach 90% accuracy?', 'What historical news evidence is available?'].map(q => <button type="button" key={q} disabled={pending} onClick={() => send(q)}>{q}</button>)}</div><form noValidate onSubmit={e => { e.preventDefault(); send(); }}><label htmlFor="pulse-research-question" className="pr-small">Question · {symbol || 'all covered stocks'} · {horizon} sessions</label><div className="pr-compose-row"><textarea id="pulse-research-question" ref={inputRef} value={input} maxLength={4000} rows={3} placeholder="Ask about an outlook, its evidence, or a portfolio scenario…" onChange={e => setInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); send(); } }} /><button type="submit" className="btn btn-primary" disabled={pending || !input.trim()}><Send size={15} />{pending ? 'Working…' : 'Send'}</button></div><div className="pr-compose-hint"><span>Enter to send · Shift + Enter for a new line</span><span>{input.length}/4,000</span></div></form></div></section>}
+  </div></ErrorBoundary>;
 }

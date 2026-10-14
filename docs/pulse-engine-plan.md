@@ -1,0 +1,21 @@
+# Pulse prediction engine: design and execution record
+
+Goal: genuine, auditable daily equity research within the existing app, using Upstox V3 and measured model performance. Budget: no paid data or cloud services. User explicitly authorizes independent implementation, backend changes required for this subsystem, and focused agents. Preserve other AI surfaces and trading/authentication behavior.
+
+Architecture: a Node CLI downloads verified BSE instrument metadata and daily candles into atomic private JSON caches. Python owns feature generation, local research storage, purged chronological experiments, persisted models and inference. Express exposes read-only results and a bounded Gemini interpretation endpoint. The existing Pulse AI route becomes a research desk using these results; unrelated AI integrations retain their existing contracts.
+
+Research contract: predictions are made after a completed daily session, with entry at the following session open and exits at 5/20 sessions. Calendar-date groups never mix between partitions. Label intervals must end before the next partition. Select models on walk-forward development data; freeze configuration before final holdout. Report probability calibration, baselines, coverage and cost assumptions. Expose poor results. No repeated tuning on holdout to pursue 90%. Data observed today may contain revised history; corporate actions and current-universe selection are explicit limitations.
+
+News contract: append-only content versions, provider and URL, original publication timestamp, first observation time, evidence of historical availability, correction links, and content hashes. Default historical eligibility uses the later publication/observation timestamp. Retrospective archival eligibility requires independently verified original content. Modern Gemini outputs never enter historical experiments. News absence is not a fabricated neutral event. News experiments run only when historical eligible observations and comparable coverage exist.
+
+## Tasks and proof
+- [ ] Data: instrument resolution, real V3 download, candle validation, resumable backfill/update, atomic writes, bounded retry; tests reject malformed/future candles and verify idempotent merging.
+- [ ] ML: causal features, next-open labels, purged splits, bounded model comparison, independent calibration, sealed holdout, persistence/inference; unit leakage tests and actual historical run.
+- [ ] News: provenance store, legitimate-source investigation, guarded import, chronological availability and source diagnostics; tests reject backdated first-seen and revised-content leakage.
+- [ ] API: result loading/status, portfolio coverage and bounded Gemini interpretation; authentication on private portfolio access, no credentials in frontend/logs, no arbitrary model/file paths.
+- [ ] Page: opportunities, stock evidence, evaluation, source ledger, portfolio and conversational research; live browser verification and production build.
+- [ ] Final review: tests, diff scope, actual experiment statistics, documentation and remaining data limitations.
+
+## Progress
+2026-10-13: approved UI checkpoint committed as 9c4a3ee; working branch codex/pulse-prediction-engine. Upstox V3 test returned HTTP 200 and seven real candles. Existing legacy AI lab contains hardcoded profiles; new pipeline must not consume it. Gemini listModels succeeds; configured 1.5 model absent. Context7 attempted but connector returns USER_NOT_LOGGED_IN; official documentation fallback.
+2026-10-15: v2 cross-sectional engine (`ml/rank.py`). NSE universe expanded to 175 stocks and 13 indices over ten years; demerger discontinuities listed; peer/benchmark/absolute objectives compared; walk-forward selection by rank IC; single holdout evaluation; write-once forward ledger. Result: a small, statistically positive 5-session ranking edge (accuracy 51.5%, IC +0.041); no skill on absolute direction; 20-session inconclusive; 90% not achieved. Research chat now validates every number Gemini writes against supplied evidence. Gemini 3.8 Flash returned 503 (high demand) during verification. Full details: `ml/RESULTS.md`.

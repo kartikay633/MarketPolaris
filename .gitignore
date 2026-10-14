@@ -36,3 +36,10 @@ pgdata/
 # Temp
 *.tmp
 *.temp
+
+# Private research data, local Python runtime, and model artifacts
+data/pulse/
+.venv-pulse/
+__pycache__/
+*.pyc
+catboost_info/

@@ -73,6 +73,7 @@ import watchlistRoutes from './routes/watchlistRoutes.js';
 import tradeRoutes from './routes/tradeRoutes.js';
 import portfolioRoutes from './routes/portfolioRoutes.js';
 import alertRoutes from './routes/alertRoutes.js';
+import researchRoutes from './routes/researchRoutes.js';
 
 // ─── API Routes ─────────────────────────────────────────────
 app.use('/api/user', userRoutes);
@@ -85,6 +86,7 @@ app.use('/api/watchlist', watchlistRoutes);
 app.use('/api/trade', tradeRoutes);
 app.use('/api/portfolio', portfolioRoutes);
 app.use('/api/alerts', alertRoutes);
+app.use('/api/research', researchRoutes);
 
 // ─── 404 for unknown API routes ─────────────────────────────
 app.use('/api', (req, res) => {

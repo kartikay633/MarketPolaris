@@ -30,3 +30,9 @@ Retain shared cards, buttons, inputs, native selects, tab groups, chart componen
 ## Verification
 
 Compare the dashboard and sibling pages in both themes, check theme persistence, narrow viewports, keyboard focus, search, tabs, filter controls, charts, and both Pulse AI modes. Run the existing production build and inspect Git scope against the pre-edit checkpoint. Database/provider failures must be reported honestly without backend changes.
+
+## Pulse AI research extension — October 2026
+
+The subsequent prediction-engine request authorizes a dedicated backend/data subsystem and replacement of the Pulse AI page. Earlier frontend-only limits still describe the completed visual overhaul, not this newly authorized subsystem. Other pages, trading, authentication and shared AI integrations retain their existing contracts.
+
+Pulse AI uses the existing slate tokens and compact table primitives. Its research views distinguish model probability, observed test accuracy, source facts and Gemini interpretation. Every result carries a data date and model version. Empty, stale, unavailable, unproven and provider-failure states are first-class states. No percentage is shown without measured data. Historical news availability must be explicit. Native symbol/horizon selectors intentionally use platform-owned popups. The detailed design and leakage contract is in `docs/pulse-engine-plan.md`.

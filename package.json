@@ -5,14 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n \"api,web\" -c \"yellow,cyan\" \"npm run server:dev\" \"npm run client:dev\"",
-    "dev:backend": "nodemon server/index.js",
+    "dev:backend": "nodemon --watch server server/index.js",
     "dev:frontend": "vite --host --port 5173",
     "server": "node server/index.js",
-    "server:dev": "nodemon server/index.js",
+    "server:dev": "nodemon --watch server server/index.js",
     "client:dev": "vite --host --port 5173",
     "build": "vite build",
     "preview": "vite preview",
-    "db:migrate": "node server/db/migrate.js"
+    "db:migrate": "node server/db/migrate.js",
+    "research:collect": "node scripts/pulse-data.js",
+    "research:news": "node scripts/pulse-news.js collect --limit 20",
+    "research:train": "node scripts/pulse-run.js train",
+    "research:update": "node scripts/pulse-run.js update",
+    "research:infer": "node scripts/pulse-run.js infer",
+    "research:forward": "node scripts/pulse-run.js forward",
+    "test:research": "node --test tests/pulse-*.test.js && node scripts/pulse-run.js test"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
