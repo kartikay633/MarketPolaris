@@ -67,3 +67,12 @@ test('Gemini failure stays explicit and output claims are validated',async t=>{
   const valid=async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({paragraphs:[{text:'Evidence is insufficient to establish predictive skill.',evidenceIds:[]}]})}]}}]})});
   assert.equal((await researchChat(request,{dataDir,fetcher:valid})).provider,'gemini');
 });
+test('volatility risk artifacts from different model versions are withheld',async t=>{
+  const dataDir=await sandbox(t);
+  await mkdir(path.join(dataDir,'reports'));
+  await writeFile(path.join(dataDir,'reports/risk-latest.json'),JSON.stringify({modelVersion:'risk-a'}));
+  await writeFile(path.join(dataDir,'risk-predictions.json'),JSON.stringify({modelVersion:'risk-b',predictions:[{symbol:'X',probabilityHighVolatility:.7}]}));
+  const result=await researchStatus(dataDir);
+  assert.equal(result.riskPredictions,null);
+  assert.equal(result.riskArtifactMismatch,true);
+});

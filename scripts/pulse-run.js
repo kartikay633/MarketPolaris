@@ -22,8 +22,11 @@ try {
   lock=await open(lockFile,'wx');
   await lock.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),mode}));
   await access(python);
-  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','-v']);
-  else if(mode==='forward') await execute(python,['-m','ml.rank','score-forward','--data-dir',DATA_DIR]);
+  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','-v']);
+  else if(mode==='forward') {
+    await execute(python,['-m','ml.rank','score-forward','--data-dir',DATA_DIR]);
+    await execute(python,['-m','ml.risk','score-forward','--data-dir',DATA_DIR]);
+  }
   else {
     if(mode!=='infer') {
       const result=await collectMarketData();
@@ -34,6 +37,8 @@ try {
     const report=await readJson(path.join(DATA_DIR,'reports/latest.json'));
     if(mode==='update'&&!report) throw new Error('No trained model. Run npm run research:train first.');
     await execute(python,['-m','ml.rank',mode==='train'?'train':'infer','--data-dir',DATA_DIR]);
+    // Volatility risk is a separate evaluated study with its own report and ledger.
+    await execute(python,['-m','ml.risk',mode==='train'?'train':'infer','--data-dir',DATA_DIR]);
   }
 } catch(error) {
   console.error(error.code==='EEXIST'?'Another research command holds the pipeline lock. Check its process before removing a stale lock.':error.message);

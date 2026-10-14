@@ -42,6 +42,15 @@ npm run test:research        # Node + Python leakage/mechanics tests
   write-once forecast to `data/pulse/forward/<model>/<date>.json`. Those forecasts are
   the only genuinely untouched test; `score-forward` evaluates them as they mature.
 
+### Volatility risk (ml/risk.py, pulse-risk-v1)
+
+Same panel and protocol; target is whether the next 20 sessions' realised volatility
+exceeds the stock's trailing-year normal level. Candidates: persistence, logistic,
+gradient boosting, ensemble; selection by development AUC; fixed tiers
+(elevated >= 0.65, calm <= 0.35). Writes `reports/risk-latest.json`,
+`risk-predictions.json` and its own write-once forward ledger. `npm run research:*`
+commands run it after the ranking engine.
+
 ---
 
 ## v1 reference (pulse-daily-v1)

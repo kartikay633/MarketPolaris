@@ -1,5 +1,43 @@
 # Pulse research results
 
+## pulse-risk-v1 — volatility risk forecast, 15 October 2026 (current)
+
+Artifact `pulse-risk-v1-391ff940541b4c77`. Same 175-stock panel, features, event
+exclusions, 80/20 split, purged walk-forward folds and 63-session refits as
+pulse-rank-v2. Question: will realised volatility of daily returns over the next 20
+sessions exceed the stock's own normal level (median 20-session volatility over the
+trailing 252 sessions, known at prediction time)? Selection by mean development AUC.
+
+| | Development (walk-forward) | Unseen holdout (29 Nov 2024 – 11 Sep 2026, 444 sessions, 77,313 rows) |
+|---|---:|---:|
+| Selected model | logistic regression (AUC 0.594) | — |
+| Accuracy | 59.7% | **64.9%** (95% CI 58.0–71.5) |
+| ROC AUC | 0.594 | **0.749** |
+| Always-majority / persistence rule | — | 51.5% / 63.3% |
+| Most confident 1% / 2% / 5% | 82.6% / 79.1% / 74.2% | **92.4% / 90.7% / 89.7%** |
+| "Elevated" tier (p ≥ 0.65) precision | 65.6% (4.8% of rows) | **89.7%** (4.3% of rows) |
+| "Calm" tier (p ≤ 0.35) precision | 70.6% | 78.9% |
+| Later volatility vs normal: elevated / calm / all | 1.13× / 0.85× / 0.97× | 1.39× / 0.78× / 0.99× |
+
+**This is where 90% is genuinely reached** — for the most confident few percent of
+*risk* forecasts on unseen data, not for price direction. Treat ~80–90% as the honest
+range for the confident subset: development folds (which include the 2020 shock and
+regime shifts in "normal" volatility) were weaker than the holdout. Overall accuracy
+beats a simple persistence rule by only 1.6 points; the value is in AUC and the
+confident tiers. Calibration is conservative: extreme buckets were more extreme in
+reality (predicted 65.7% → observed 85.1%; 28.2% → 16.1%). Accuracy varied by year
+(2025 69.5%, 2026 59.4%) and was lower when NIFTY traded below its 200-day average
+(56.1% vs 73.3%). A frozen end-of-development model scored 65.3% / AUC 0.757.
+
+Disclosure: an exploratory probe of a similar volatility target was run on the same
+holdout dates minutes before this protocol was written (it reported 66.6% accuracy, AUC
+0.726 with gradient boosting). The protocol was not tuned to that probe — the selected
+model and thresholds came from development data — but the forward ledger is the clean test.
+
+Volatility forecasts say how much a stock may swing, never which way.
+
+---
+
 ## pulse-rank-v2 — 15 October 2026 (current)
 
 Artifact `pulse-rank-v2-fd03e214909413fe` (local, ignored `data/pulse/models/`).

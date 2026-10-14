@@ -58,6 +58,10 @@
 .pr-facts div { display: flex; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--border-subtle); font-size: 12.5px; }
 .pr-facts dt { color: var(--text-muted); }
 .pr-facts dd { margin: 0; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.pr-risk { border-top: 1px solid var(--border-subtle); }
+.pr-risk h3 { margin: 0 0 6px; font-weight: 600; }
+.pr-risk-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.pr-risk-row strong { font-size: 22px; font-variant-numeric: tabular-nums; }
 .pr-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .pr-details { padding: 8px 16px 14px; font-size: 12px; }
 .pr-details summary { cursor: pointer; color: var(--text-secondary); font-weight: 600; }
