@@ -290,11 +290,11 @@ def score_forward(data_dir):
         for p in entry["predictions"]:
             key = (pd.Timestamp(entry["asOf"]), p["symbol"])
             if key in d.index:
-                rows.append({"y": int(d.loc[key, "y"]), "p": p["probabilityHighVolatility"]})
+                rows.append({"date": key[0], "y": int(d.loc[key, "y"]), "p": p["probabilityHighVolatility"]})
     summary = {"generatedAt": utcnow(), "modelVersion": report["modelVersion"], "status": "experimental", "recordedDays": len(files)}
     if rows:
         frame = pd.DataFrame(rows)
-        summary.update({"scored": True, **classification(frame.y, frame.p), "auc": auc(frame.y, frame.p)})
+        summary.update({"scored": True, "maturedSessions": int(frame.date.nunique()), **classification(frame.y, frame.p), "auc": auc(frame.y, frame.p)})
     else:
         summary["scored"] = False
     atomic_json(root / "reports" / "risk-forward.json", summary)

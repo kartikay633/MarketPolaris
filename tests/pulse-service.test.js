@@ -76,3 +76,15 @@ test('volatility risk artifacts from different model versions are withheld',asyn
   assert.equal(result.riskPredictions,null);
   assert.equal(result.riskArtifactMismatch,true);
 });
+test('forward scores are exposed only for the current model version',async t=>{
+  const dataDir=await sandbox(t);
+  await mkdir(path.join(dataDir,'reports'));
+  await writeFile(path.join(dataDir,'reports/latest.json'),JSON.stringify({modelVersion:'rank-now'}));
+  await writeFile(path.join(dataDir,'reports/risk-latest.json'),JSON.stringify({modelVersion:'risk-now'}));
+  await writeFile(path.join(dataDir,'reports/forward.json'),JSON.stringify({modelVersion:'rank-now',horizons:[{horizon:5,status:'no matured forecasts'}]}));
+  await writeFile(path.join(dataDir,'reports/risk-forward.json'),JSON.stringify({modelVersion:'risk-retired',scored:true,accuracy:0.9}));
+  const {forwardTest}=await researchStatus(dataDir);
+  assert.equal(forwardTest.rank.modelVersion,'rank-now');
+  assert.equal(forwardTest.risk,null);
+  assert.equal(forwardTest.minimumMaturedSessions,20);
+});

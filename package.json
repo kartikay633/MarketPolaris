@@ -19,6 +19,7 @@
     "research:update": "node scripts/pulse-run.js update",
     "research:infer": "node scripts/pulse-run.js infer",
     "research:forward": "node scripts/pulse-run.js forward",
+    "research:daily": "node scripts/pulse-daily.js",
     "test:research": "node --test tests/pulse-*.test.js && node scripts/pulse-run.js test"
   },
   "dependencies": {

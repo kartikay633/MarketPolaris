@@ -612,6 +612,7 @@ def score_forward(data_dir):
     long = build_panel(frames, meta)
     summary = {"generatedAt": utcnow(), "modelVersion": report["modelVersion"], "status": "experimental", "horizons": []}
     files = sorted((root / "forward" / report["modelVersion"]).glob("*.json"))
+    summary["recordedDays"] = len(files)
     for h in HORIZONS:
         d = horizon_frame(long, h).set_index(["date", "symbol"])
         rows = []

@@ -22,19 +22,24 @@ export function geminiConfig() {
   const model=process.env.PULSE_GEMINI_MODEL || 'gemini-3.8-flash';
   return {configured:Boolean(process.env.GEMINI_API_KEY),model:/^[a-zA-Z0-9._-]+$/.test(model)?model:'gemini-3.8-flash'};
 }
+// Fewer matured forward sessions than this are reported as too early to judge.
+export const FORWARD_MIN_SESSIONS=20;
 export async function researchStatus(dataDir=DATA_DIR) {
-  const [{readNews},collection,report,predictions,riskReport,riskPredictions] = await Promise.all([
+  const [{readNews},collection,report,predictions,riskReport,riskPredictions,forward,riskForward,dailyRun] = await Promise.all([
     import('./news.js'), readJson(path.join(dataDir,'collection.json')),
     readJson(path.join(dataDir,'reports/latest.json')), readJson(path.join(dataDir,'predictions.json')),
     readJson(path.join(dataDir,'reports/risk-latest.json')), readJson(path.join(dataDir,'risk-predictions.json')),
+    readJson(path.join(dataDir,'reports/forward.json')), readJson(path.join(dataDir,'reports/risk-forward.json')), readJson(path.join(dataDir,'reports/daily-run.json')),
   ]);
   // Volatility risk is a separate study; mismatched artifacts are withheld, never mixed.
   const riskConsistent=Boolean(riskReport&&riskPredictions&&riskReport.modelVersion===riskPredictions.modelVersion);
   const news=await readNews(dataDir);
+  // Forward scores belong to one model version; a retired model's score is not shown as current evidence.
+  const forwardTest={rank:forward&&forward.modelVersion===report?.modelVersion?forward:null,risk:riskForward&&riskForward.modelVersion===riskReport?.modelVersion?riskForward:null,lastRun:dailyRun,minimumMaturedSessions:FORWARD_MIN_SESSIONS};
   const dataDates=collection?.instruments?.filter(x=>x.status==='ready').map(x=>x.lastDate).sort()||[];
   const predictionDates=predictions?.predictions?.map(p=>p.asOf).sort()||[];
   const consistent=Boolean(report&&predictions&&report.modelVersion===predictions.modelVersion);
-  return {collection,report,predictions:consistent?predictions:null,riskReport,riskPredictions:riskConsistent?riskPredictions:null,riskArtifactMismatch:Boolean(riskPredictions&&!riskConsistent),news,gemini:geminiConfig(),stale:isStale(dataDates[0])||isStale(predictionDates[0])||!consistent,artifactMismatch:Boolean(predictions&&!consistent),serverTime:new Date().toISOString()};
+  return {collection,report,predictions:consistent?predictions:null,riskReport,riskPredictions:riskConsistent?riskPredictions:null,riskArtifactMismatch:Boolean(riskPredictions&&!riskConsistent),news,forwardTest,gemini:geminiConfig(),stale:isStale(dataDates[0])||isStale(predictionDates[0])||!consistent,artifactMismatch:Boolean(predictions&&!consistent),serverTime:new Date().toISOString()};
 }
 // Every number Gemini writes must reproduce a number in the supplied evidence at the
 // precision written (fractions may be written as percentages). Anything else is rejected.
