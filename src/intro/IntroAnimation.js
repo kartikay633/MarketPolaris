@@ -173,7 +173,6 @@ class MarketDataUniverse3D {
     this.fieldBend = { x: 0, y: 0 };
 
     this.initSignals();
-    this.initFinancialTopology();
     this.initPerspectiveGrid();
   }
 
@@ -304,88 +303,6 @@ class MarketDataUniverse3D {
     this.scene.add(this.streakMesh);
   }
 
-  // Financial Constellation: Market Trajectory Channels & Liquidity Hubs
-  initFinancialTopology() {
-    const lineCoords = [];
-    const lineColors = [];
-
-    const cCyan = new THREE.Color(0x00E5FF);
-    const cBlue = new THREE.Color(0x2979FF);
-    const cDim = new THREE.Color(0x183860);
-
-    // Continuous 3D Market Trajectory Channels
-    this.trendPaths = [
-      [
-        new THREE.Vector3(-320, -90, -550),
-        new THREE.Vector3(-180, -40, -380),
-        new THREE.Vector3(-50, 10, -220),
-        new THREE.Vector3(90, 70, -100),
-        new THREE.Vector3(260, 130, -20)
-      ],
-      [
-        new THREE.Vector3(-240, 110, -450),
-        new THREE.Vector3(-100, 50, -320),
-        new THREE.Vector3(30, -30, -200),
-        new THREE.Vector3(160, 40, -90),
-        new THREE.Vector3(290, -10, 30)
-      ],
-      [
-        new THREE.Vector3(240, -100, -500),
-        new THREE.Vector3(120, -50, -350),
-        new THREE.Vector3(-20, 20, -210),
-        new THREE.Vector3(-160, 80, -90),
-        new THREE.Vector3(-280, 130, 20)
-      ]
-    ];
-
-    this.trendPaths.forEach((path, pIdx) => {
-      for (let i = 0; i < path.length - 1; i++) {
-        const p1 = path[i];
-        const p2 = path[i + 1];
-        lineCoords.push(p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
-        const col = (pIdx % 2 === 0) ? cCyan : cBlue;
-        for (let v = 0; v < 2; v++) lineColors.push(col.r, col.g, col.b);
-      }
-    });
-
-    // Subtle Liquidity Hubs
-    const hubs = [
-      new THREE.Vector3(-160, 60, -120),
-      new THREE.Vector3(140, -40, -220),
-      new THREE.Vector3(-60, -80, -340),
-      new THREE.Vector3(180, 70, -110)
-    ];
-
-    hubs.forEach(hub => {
-      for (let s = 0; s < 5; s++) {
-        const angle = (s / 5) * Math.PI * 2;
-        const dist = 32;
-        const sat = new THREE.Vector3(
-          hub.x + Math.cos(angle) * dist,
-          hub.y + Math.sin(angle) * dist * 0.7,
-          hub.z + ((s % 2) - 0.5) * 35
-        );
-        lineCoords.push(hub.x, hub.y, hub.z, sat.x, sat.y, sat.z);
-        for (let v = 0; v < 2; v++) lineColors.push(cDim.r, cDim.g, cDim.b);
-      }
-    });
-
-    const topoGeom = new THREE.BufferGeometry();
-    topoGeom.setAttribute('position', new THREE.Float32BufferAttribute(lineCoords, 3));
-    topoGeom.setAttribute('color', new THREE.Float32BufferAttribute(lineColors, 3));
-
-    this.constellationMaterial = new THREE.LineBasicMaterial({
-      vertexColors: true,
-      transparent: true,
-      opacity: 0,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false
-    });
-
-    this.constellationLines = new THREE.LineSegments(topoGeom, this.constellationMaterial);
-    this.scene.add(this.constellationLines);
-  }
-
   // 3D Perspective Digital Floor Grid
   initPerspectiveGrid() {
     const gridLines = [];
@@ -435,7 +352,6 @@ class MarketDataUniverse3D {
     // ── STAGE 1: GENESIS (0 - 0.6s) ──
     const genAlpha = clamp01(elapsed / T.genesisEnd);
     this.signalsMaterial.opacity = easeOutCubic(genAlpha) * 0.95;
-    this.constellationMaterial.opacity = (elapsed >= 350) ? clamp01((elapsed - 350) / 350) * 0.65 : 0;
     this.gridMaterial.opacity = (elapsed >= 400) ? clamp01((elapsed - 400) / 350) * 0.40 : 0;
 
     // ── STAGE 2: HIGH-SPEED DEEP STAR TRAVEL (0.6s - 3.3s) ──
@@ -515,12 +431,23 @@ class MarketDataUniverse3D {
     this.camera.lookAt(0, 0, this.camera.position.z - 300);
 
     if (elapsed >= T.introComplete) {
-      this.constellationMaterial.opacity = 0.55;
       this.gridMaterial.opacity = 0.32;
       this.signalsMaterial.opacity = 0.85;
     }
 
     this.renderer.render(this.scene, this.camera);
+  }
+
+  // Release GPU buffers, textures and the WebGL context so leaving the intro frees the GPU.
+  dispose() {
+    this.scene.traverse(obj => {
+      obj.geometry?.dispose();
+      if (obj.material) {
+        obj.material.map?.dispose();
+        obj.material.dispose();
+      }
+    });
+    this.renderer.dispose();
   }
 
   resize(w, h) {
@@ -957,6 +884,8 @@ class MarketPulseExperience {
   }
 
   destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
     if (this.rafId) {
       cancelAnimationFrame(this.rafId);
       this.rafId = null;
@@ -965,6 +894,8 @@ class MarketPulseExperience {
     if (this._onMouseMove) window.removeEventListener('mousemove', this._onMouseMove);
     if (this._onKeyDown) window.removeEventListener('keydown', this._onKeyDown);
     if (this._onClick) window.removeEventListener('click', this._onClick);
+    this.universe.dispose();
+    if (window.MarketPulse === this) window.MarketPulse = null;
   }
 
   restart() {
@@ -1049,18 +980,3 @@ export function startIntroExperience() {
 
 export { MarketPulseExperience };
 export default MarketPulseExperience;
-
-function boot() {
-  if (document.getElementById('webgl-canvas') && document.getElementById('intro-canvas')) {
-    startIntroExperience();
-  }
-}
-
-if (typeof window !== 'undefined') {
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot);
-  } else {
-    boot();
-  }
-}
-

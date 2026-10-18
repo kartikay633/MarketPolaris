@@ -1,36 +1,30 @@
-// ROADMAP: Section 5, Phase 1 & Design Refinement — Institutional Auth Layout
+// Auth layout — the intro's deep-space horizon behind a single terminal access panel.
 import React from 'react';
 import { Outlet, Link } from 'react-router-dom';
+import BrandMark from '../components/common/BrandMark';
 
 export default function AuthLayout() {
   return (
-    <div className="auth-layout">
-      {/* Brand Header with Authoritative Official Logo */}
-      <div className="auth-brand">
-        <Link to="/" className="auth-brand-link">
-          <img
-            src="/official_logo.png"
-            alt="Market Pulse Logo"
-            className="auth-brand-logo"
-          />
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '5px' }}>
-            <span className="auth-brand-market">MARKET</span>
-            <span className="auth-brand-pulse">PULSE</span>
-          </div>
-        </Link>
-        <p className="auth-subtitle">
-          INDIAN EQUITIES ANALYTICS & INTELLIGENCE
-        </p>
+    <div className="auth-layout fd-auth">
+      <div className="fd-hero-world" aria-hidden="true">
+        <div className="fd-stars" />
+        <div className="fd-floor" />
       </div>
 
-      {/* Solid Terminal Auth Card */}
+      <div className="auth-brand">
+        <Link to="/" className="auth-brand-link fd-brand" aria-label="Market Pulse home">
+          <BrandMark className="fd-brand-mark" />
+          <span className="fd-brand-word">MARKET PULSE</span>
+        </Link>
+        <p className="auth-subtitle fd-lbl">Indian equities analytics &amp; intelligence</p>
+      </div>
+
       <div className="auth-card">
         <Outlet />
       </div>
 
-      {/* Clean Institutional Footer */}
-      <div className="auth-footer">
-        Institutional-grade analytics & simulated execution • NSE / BSE Live
+      <div className="auth-footer fd-lbl">
+        Simulated execution · NSE / BSE live data
       </div>
     </div>
   );

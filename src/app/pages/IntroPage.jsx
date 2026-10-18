@@ -1,7 +1,6 @@
 // ROADMAP: Section 5 & 16 — Intro Page & Router Integration
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { startIntroExperience } from '@/intro/IntroAnimation.js';
 import '@/styles/main.css';
 
 export default function IntroPage() {
@@ -9,13 +8,14 @@ export default function IntroPage() {
   const [showEnter, setShowEnter] = useState(false);
 
   useEffect(() => {
-    // Start the 3D data universe & intro animation
+    // three.js loads only for the intro, keeping it out of the app's main bundle.
     let exp;
-    try {
-      exp = startIntroExperience();
-    } catch (err) {
-      console.error('Failed to initialize intro animation:', err);
-    }
+    let cancelled = false;
+    import('@/intro/IntroAnimation.js')
+      .then(({ startIntroExperience }) => {
+        if (!cancelled) exp = startIntroExperience();
+      })
+      .catch((err) => console.error('Failed to initialize intro animation:', err));
 
     // Reveal Enter Platform button once brand settles (~5.2s)
     const timer = setTimeout(() => {
@@ -23,6 +23,7 @@ export default function IntroPage() {
     }, 5200);
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       if (exp && typeof exp.destroy === 'function') {
         exp.destroy();

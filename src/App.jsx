@@ -1,5 +1,5 @@
 // ROADMAP: Section 3, 5 & 16 — Master App Router
-import React, { useEffect } from 'react';
+import React, { lazy, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
@@ -11,20 +11,40 @@ import AppLayout from './app/layouts/AppLayout';
 import LoginPage from './app/pages/LoginPage';
 import SignupPage from './app/pages/SignupPage';
 import OnboardingPage from './app/pages/OnboardingPage';
-import DashboardPage from './app/pages/DashboardPage';
-import MarketsPage from './app/pages/MarketsPage';
-import StockDetailPage from './app/pages/StockDetailPage';
-import NewsPage from './app/pages/NewsPage';
-import AIPage from './app/pages/AIPage';
-import WatchlistPage from './app/pages/WatchlistPage';
-import PortfolioPage from './app/pages/PortfolioPage';
-import TradePage from './app/pages/TradePage';
-import AlertsPage from './app/pages/AlertsPage';
-import SettingsPage from './app/pages/SettingsPage';
 import AuthCallbackPage from './app/pages/AuthCallbackPage';
 import ProtectedRoute from './app/components/common/ProtectedRoute';
 import { useThemeStore } from './app/stores/themeStore';
 import { useAuthStore } from './app/stores/authStore';
+
+// Terminal pages load as separate chunks, then all are prefetched while the browser is idle,
+// so the first screen arrives sooner and later page switches never wait on a download.
+const pageLoaders = {
+  DashboardPage: () => import('./app/pages/DashboardPage'),
+  MarketsPage: () => import('./app/pages/MarketsPage'),
+  StockDetailPage: () => import('./app/pages/StockDetailPage'),
+  NewsPage: () => import('./app/pages/NewsPage'),
+  AIPage: () => import('./app/pages/AIPage'),
+  WatchlistPage: () => import('./app/pages/WatchlistPage'),
+  PortfolioPage: () => import('./app/pages/PortfolioPage'),
+  TradePage: () => import('./app/pages/TradePage'),
+  AlertsPage: () => import('./app/pages/AlertsPage'),
+  SettingsPage: () => import('./app/pages/SettingsPage'),
+};
+const DashboardPage = lazy(pageLoaders.DashboardPage);
+const MarketsPage = lazy(pageLoaders.MarketsPage);
+const StockDetailPage = lazy(pageLoaders.StockDetailPage);
+const NewsPage = lazy(pageLoaders.NewsPage);
+const AIPage = lazy(pageLoaders.AIPage);
+const WatchlistPage = lazy(pageLoaders.WatchlistPage);
+const PortfolioPage = lazy(pageLoaders.PortfolioPage);
+const TradePage = lazy(pageLoaders.TradePage);
+const AlertsPage = lazy(pageLoaders.AlertsPage);
+const SettingsPage = lazy(pageLoaders.SettingsPage);
+function prefetchPages() {
+  const run = () => Object.values(pageLoaders).forEach((load) => load().catch(() => {}));
+  if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 });
+  else setTimeout(run, 1500);
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -40,6 +60,7 @@ export default function App() {
   const theme = useThemeStore((state) => state.theme);
   useEffect(() => {
     useAuthStore.getState().initialize();
+    prefetchPages();
   }, []);
 
   return (

@@ -1,7 +1,6 @@
-// ROADMAP: Section 2 & Design Refinement — Institutional Market Breadth Bar
+// Market breadth pane — advancing / unchanged / declining counts with a tick-density bar.
 import React from 'react';
 import { formatNumber } from '../../utils/formatters';
-import { ArrowUpRight, ArrowDownRight, Activity, ShieldAlert } from 'lucide-react';
 
 export function MarketBreadthBar({ breadth }) {
   if (!breadth) return null;
@@ -11,125 +10,44 @@ export function MarketBreadthBar({ breadth }) {
 
   const advPct = ((advancing / total) * 100).toFixed(1);
   const decPct = ((declining / total) * 100).toFixed(1);
-  const unchPct = ((unchanged / total) * 100).toFixed(1);
 
   const adRatio = declining > 0 ? (advancing / declining).toFixed(2) : advancing;
   const isBullish = parseFloat(adRatio) >= 1.0;
 
   return (
-    <div
-      className="card card-padded"
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '14px',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
-      {/* Top Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: isBullish ? '#10B981' : '#F43F5E', boxShadow: 'none' }} />
-          <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-            NSE Market Breadth & Participation
-          </span>
-        </div>
+    <div className="fd-pane">
+      <div className="fd-pane-head">
+        <span className="fd-lbl">Breadth · NSE</span>
+        <span className="fd-lbl" style={{ color: isBullish ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+          {isBullish ? 'Bullish skew' : 'Bearish skew'} · A/D {adRatio}
+        </span>
+      </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span 
-            className="badge" 
-            style={{ 
-              backgroundColor: isBullish ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)',
-              color: isBullish ? 'var(--positive-text)' : 'var(--negative-text)',
-              border: `1px solid ${isBullish ? 'rgba(16, 185, 129, 0.35)' : 'rgba(244, 63, 94, 0.35)'}`,
-              padding: '3px 10px',
-              fontSize: '11px',
-              fontWeight: 700,
-            }}
-          >
-            {isBullish ? 'BULLISH SKEW' : 'BEARISH SKEW'} • A/D {adRatio}
-          </span>
+      <div className="fd-breadth-nums">
+        <div>
+          <div className="fd-breadth-big" style={{ color: 'var(--positive-text)' }}>{formatNumber(advancing, 0)}</div>
+          <div className="fd-breadth-sub">▲ Advancing · {advPct}%</div>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <div className="fd-breadth-big" style={{ fontSize: '32px', color: 'var(--text-secondary)' }}>{formatNumber(unchanged, 0)}</div>
+          <div className="fd-breadth-sub">Unchanged</div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="fd-breadth-big" style={{ color: 'var(--negative-text)' }}>{formatNumber(declining, 0)}</div>
+          <div className="fd-breadth-sub">{decPct}% · Declining ▼</div>
         </div>
       </div>
 
-      {/* 3 Metric Tiles */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 160px), 1fr))', gap: '10px' }}>
-        {/* Advancing Tile */}
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(16, 185, 129, 0.08)', border: '1px solid rgba(16, 185, 129, 0.20)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Advancing</div>
-            <div className="num-tabular" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--positive-text)' }}>
-              {formatNumber(advancing, 0)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>({advPct}%)</span>
-            </div>
-          </div>
-          <ArrowUpRight size={18} color="var(--positive)" />
-        </div>
-
-        {/* Declining Tile */}
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(244, 63, 94, 0.08)', border: '1px solid rgba(244, 63, 94, 0.20)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Declining</div>
-            <div className="num-tabular" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--negative-text)' }}>
-              {formatNumber(declining, 0)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)' }}>({decPct}%)</span>
-            </div>
-          </div>
-          <ArrowDownRight size={18} color="var(--negative)" />
-        </div>
-
-        {/* Unchanged Tile */}
-        <div style={{ padding: '10px 14px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--card-hover)', border: '1px solid rgba(255, 255, 255, 0.08)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div>
-            <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', textTransform: 'uppercase', fontWeight: 600 }}>Unchanged</div>
-            <div className="num-tabular" style={{ fontSize: '18px', fontWeight: 800, color: 'var(--text-primary)' }}>
-              {formatNumber(unchanged, 0)} <span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--text-muted)' }}>({unchPct}%)</span>
-            </div>
-          </div>
-          <Activity size={18} color="var(--text-muted)" />
-        </div>
-      </div>
-
-      {/* Segmented Breadth Bar */}
       <div
-        style={{
-          width: '100%',
-          height: '8px',
-          borderRadius: '4px',
-          backgroundColor: 'var(--card-hover)',
-          display: 'flex',
-          overflow: 'hidden',
-          gap: '2px',
-        }}
+        className="fd-breadth-bar"
+        role="img"
+        aria-label={`${advancing} advancing, ${unchanged} unchanged, ${declining} declining`}
       >
-        <div
-          style={{
-            width: `${advPct}%`,
-            background: 'var(--positive)',
-            borderRadius: '4px 0 0 4px',
-            boxShadow: 'none',
-            transition: 'width 0.4s ease',
-          }}
-          title={`Advancing: ${advancing} (${advPct}%)`}
-        />
-        <div
-          style={{
-            width: `${unchPct}%`,
-            backgroundColor: 'rgba(255, 255, 255, 0.2)',
-            transition: 'width 0.4s ease',
-          }}
-          title={`Unchanged: ${unchanged} (${unchPct}%)`}
-        />
-        <div
-          style={{
-            width: `${decPct}%`,
-            background: 'var(--negative)',
-            borderRadius: '0 4px 4px 0',
-            boxShadow: 'none',
-            transition: 'width 0.4s ease',
-          }}
-          title={`Declining: ${declining} (${decPct}%)`}
-        />
+        <div className="adv" style={{ flex: advancing || 0.0001 }} />
+        <div className="unc" style={{ flex: unchanged || 0.0001 }} />
+        <div className="dec" style={{ flex: declining || 0.0001 }} />
       </div>
+      <div className="fd-lbl" style={{ marginTop: '12px' }}>{formatNumber(total, 0)} instruments traded</div>
     </div>
   );
 }

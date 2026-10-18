@@ -1,43 +1,83 @@
-// ROADMAP: Section 2, 5 & Design Refinement — Institutional Market Terminal Dashboard (Market overview)
-import React, { useState } from 'react';
+// Flight Deck dashboard — market overview, paper capital, flows, participation, movers and the wire.
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMarketOverview, useGainers, useLosers, useActive } from '../hooks/useMarketData';
 import { useMarketNews } from '../hooks/useNews';
-import { usePortfolio, useResetPortfolio, useAddFunds } from '../hooks/useTrade';
-import IndexCard from '../components/market/IndexCard';
+import { usePortfolio, useAddFunds } from '../hooks/useTrade';
+import { useStockHistory } from '../hooks/useStockData';
 import MarketBreadthBar from '../components/market/MarketBreadthBar';
 import SectorBar from '../components/market/SectorBar';
 import CompanyLogo from '../components/common/CompanyLogo';
 import AISummaryCard from '../components/ai/AISummaryCard';
-import { CardSkeleton, TableSkeleton } from '../components/common/LoadingSkeleton';
+import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorBoundary from '../components/common/ErrorBoundary';
-import { formatINR, formatIndianNumber } from '../utils/formatters';
-import {
-  TrendingUp,
-  TrendingDown,
-  Activity,
-  Wallet,
-  ArrowRight,
-  RefreshCw,
-  Newspaper,
-  ShieldCheck,
-  Zap,
-  Sparkles,
-  Star,
-  BarChart3,
-  Flame,
-  ArrowUpRight,
-  ExternalLink,
-  Layers,
-  PlusCircle,
-  RotateCcw,
-} from 'lucide-react';
+import { formatINR, formatNumber, formatVolume } from '../utils/formatters';
+import { TrendingUp, TrendingDown, Activity, Flame, RefreshCw } from 'lucide-react';
+
+const IST_OFFSET_S = 19800;
+const SESSION_OPEN_MIN = 555; // 09:15 IST
+const SESSION_LEN_MIN = 375; // 09:15 → 15:30
+const TRACE_W = 1000;
+const TRACE_H = 236;
+const AXIS_TICKS = ['09:15', '10:30', '11:45', '13:00', '14:15', '15:30'];
+const VIX_MIN = 10;
+const VIX_MAX = 35;
+
+const istDay = (t) => new Date((t + IST_OFFSET_S) * 1000).toISOString().slice(0, 10);
+const signed = (n, digits = 2) => `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n), digits)}`;
+const clampPct = (n) => Math.min(100, Math.max(0, n));
+const rangePos = (value, low, high) => (high > low ? clampPct(((value - low) / (high - low)) * 100) : 50);
+
+// Builds the intraday trace for the most recent session in the candle history.
+function buildSessionTrace(candles, previousClose) {
+  if (!candles?.length) return null;
+  const sorted = [...candles].filter((c) => Number.isFinite(c?.close)).sort((a, b) => a.time - b.time);
+  if (sorted.length < 2) return null;
+  const lastDay = istDay(sorted[sorted.length - 1].time);
+  const session = sorted.filter((c) => istDay(c.time) === lastDay);
+  if (session.length < 2) return null;
+
+  const closes = session.map((c) => c.close);
+  const refs = Number.isFinite(previousClose) ? [...closes, previousClose] : closes;
+  const lo = Math.min(...refs);
+  const hi = Math.max(...refs);
+  const span = Math.max(hi - lo, 0.0001);
+  const pad = 18;
+  const y = (v) => pad + (1 - (v - lo) / span) * (TRACE_H - pad * 2);
+  const x = (t) => {
+    const minute = (((t + IST_OFFSET_S) % 86400) / 60) - SESSION_OPEN_MIN;
+    return (Math.min(Math.max(minute, 0), SESSION_LEN_MIN) / SESSION_LEN_MIN) * TRACE_W;
+  };
+
+  const pts = session.map((c) => [x(c.time), y(c.close)]);
+  const line = pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)} ${py.toFixed(1)}`).join(' ');
+  const last = pts[pts.length - 1];
+  return {
+    line,
+    fill: `${line} L${last[0].toFixed(1)} ${TRACE_H} L${pts[0][0].toFixed(1)} ${TRACE_H} Z`,
+    prevY: Number.isFinite(previousClose) ? y(previousClose) : null,
+    endX: last[0] / TRACE_W,
+    endY: last[1] / TRACE_H,
+    lastClose: closes[closes.length - 1],
+    date: new Date((session[0].time + IST_OFFSET_S) * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
+  };
+}
+
+function useIstClock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  return now;
+}
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
   const [activeTab, setActiveTab] = useState('gainers');
+  const now = useIstClock();
 
   const { data: overview, isLoading: isOverviewLoading, refetch: refetchOverview } = useMarketOverview();
   const { data: gainers = [], isLoading: isGainersLoading } = useGainers(15);
@@ -47,7 +87,6 @@ export default function DashboardPage() {
 
   // Live Simulated Capital Queries & Mutations
   const { data: portfolioData, refetch: refetchPortfolio } = usePortfolio();
-  const resetMutation = useResetPortfolio();
   const addFundsMutation = useAddFunds();
 
   const cashBalance = portfolioData?.account?.cashBalance ?? 1000000;
@@ -88,642 +127,399 @@ export default function DashboardPage() {
     return (s.ltp / s.fiftyTwoWeekHigh) >= 0.90;
   });
 
+  const indices = overview?.indices || [];
+  const nifty = indices.find((i) => i.symbol === 'NIFTY_50') || indices[0];
+  const vixIndex = indices.find((i) => i.symbol === 'INDIA_VIX');
+  const stripIndices = indices.filter((i) => i !== nifty);
+
+  const { data: niftyCandles = [] } = useStockHistory(nifty?.symbol, '1D');
+  const trace = useMemo(() => buildSessionTrace(niftyCandles, nifty?.previousClose), [niftyCandles, nifty?.previousClose]);
+
+  const isOpen = overview?.status === 'OPEN';
+  const breadth = overview?.breadth;
+  const vixValue = vixIndex?.value ?? 12.85;
+  const vixChange = vixIndex?.changePercent ?? -3.16;
+  const pcr = overview?.derivatives?.pcr ?? 1.15;
+  const vixPos = clampPct(((vixValue - VIX_MIN) / (VIX_MAX - VIX_MIN)) * 100);
+  const totalInflow = institutionalFlows.fiiNet + institutionalFlows.diiNet;
+
+  const istTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
+  const istDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+
+  const niftyUp = (nifty?.change ?? 0) >= 0;
+  const [niftyInt, niftyDec] = nifty ? formatNumber(nifty.value, 2).split('.') : ['—', null];
+
+  const moverTabs = [
+    { id: 'gainers', label: 'Gainers', icon: TrendingUp, count: gainers.length },
+    { id: 'losers', label: 'Losers', icon: TrendingDown, count: losers.length },
+    { id: 'active', label: 'Most active', icon: Activity, count: active.length },
+    { id: 'breakouts', label: '52W breakouts', icon: Flame, count: breakouts.length },
+  ];
+  const displayList =
+    activeTab === 'gainers' ? gainers :
+    activeTab === 'losers' ? losers :
+    activeTab === 'active' ? active :
+    breakouts;
+
   return (
     <ErrorBoundary>
-      <div className="page-container dashboard-page">
-        {/* Terminal Header & Virtual Capital Telemetry */}
-        <div 
-          className="dashboard-heading"
-          style={{ 
-            display: 'flex', 
-            flexWrap: 'wrap', 
-            alignItems: 'center', 
-            justifyContent: 'space-between', 
-            gap: '18px',
-            background: 'var(--surface)',
-            borderColor: 'rgba(59, 130, 246, 0.25)',
-            boxShadow: 'none',
-            position: 'relative',
-            overflow: 'hidden'
-          }}
-        >
-          {/* Subtle ambient light orb */}
-          <div 
-            style={{
-              position: 'absolute',
-              top: '-30px',
-              left: '-20px',
-              width: '180px',
-              height: '180px',
-              background: 'transparent',
-              pointerEvents: 'none',
-              filter: 'blur(20px)',
-            }} 
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', position: 'relative', zIndex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <h1 style={{ fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--text-primary)', margin: 0, letterSpacing: '-0.01em' }}>
-                Market overview
-              </h1>
-              {overview?.status === 'CLOSED' ? (
-                <span className="badge badge--accent" style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
-                  POST-MARKET WRAP &amp; OVERNIGHT FEED
-                </span>
-              ) : (
-                <span className="badge badge--live">
-                  NSE &amp; BSE LIVE TELEMETRY
-                </span>
-              )}
-            </div>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-              {overview?.status === 'CLOSED'
-                ? 'Last trading session closing settlement & after-hours corporate disclosures synchronized.'
-                : 'National & Bombay Stock Exchange feeds synchronized.'}{' '}
-              Welcome back, <strong style={{ color: 'var(--text-primary)' }}>{displayName}</strong>.
-            </p>
-
-            {/* Quick Action Navigation Pills */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '10px', flexWrap: 'wrap' }}>
-              <Link
-                to="/trade"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: 'var(--radius-xs)',
-                  backgroundColor: 'rgba(59, 130, 246, 0.18)',
-                  color: 'var(--accent-bright)',
-                  border: '1px solid rgba(59, 130, 246, 0.40)',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  boxShadow: 'none',
-                }}
-              >
-                <Zap size={13} />
-                <span>Paper trading</span>
-              </Link>
-              <Link
-                to="/markets"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: 'var(--radius-xs)',
-                  backgroundColor: 'var(--surface)',
-                  color: 'var(--text-secondary)',
-                  border: '1px solid var(--border)',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                }}
-              >
-                <BarChart3 size={13} color="var(--accent)" />
-                <span>Screener &amp; heatmap</span>
-              </Link>
-              <Link
-                to="/ai"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '5px 12px',
-                  borderRadius: 'var(--radius-xs)',
-                  backgroundColor: 'rgba(168, 85, 247, 0.15)',
-                  color: 'var(--accent-bright)',
-                  border: '1px solid rgba(168, 85, 247, 0.40)',
-                  fontSize: '11.5px',
-                  fontWeight: 600,
-                  textDecoration: 'none',
-                  boxShadow: 'none',
-                }}
-              >
-                <Sparkles size={13} color="#c084fc" />
-                <span>Pulse AI research</span>
-              </Link>
-            </div>
+      <div className="fd-dash dashboard-page">
+        {/* ── Hero: the index, live ─────────────────────────── */}
+        <section className="fd-hero" aria-labelledby="fd-index-title">
+          <div className="fd-hero-world" aria-hidden="true">
+            <div className="fd-stars" />
+            <div className="fd-floor" />
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', position: 'relative', zIndex: 1 }}>
-            {/* Live Virtual Capital Console */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: '12px', 
-              padding: '10px 18px', 
-              borderRadius: 'var(--radius-md)', 
-              backgroundColor: 'var(--surface)', 
-              border: '1px solid var(--border)',
-              boxShadow: 'none',
-              backdropFilter: 'blur(10px)'
-            }}>
-              <div style={{ 
-                width: '32px', 
-                height: '32px', 
-                borderRadius: 'var(--radius-sm)', 
-                backgroundColor: 'rgba(59, 130, 246, 0.12)', 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                border: '1px solid rgba(59, 130, 246, 0.25)'
-              }}>
-                <Wallet size={16} color="var(--accent-bright)" />
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                <span style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                  Available Cash
-                </span>
-                <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', letterSpacing: '-0.02em' }}>
-                  ₹{formatIndianNumber(cashBalance)}
-                </span>
+          <div className="fd-hero-inner fd-wrap">
+            <div className="fd-hero-top">
+              <div className="fd-hero-main">
+                <div className="fd-status fd-lbl">
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
+                    <span className={`fd-live-dot${isOpen ? '' : ' fd-live-dot--closed'}`} />
+                    {isOpen ? 'NSE · BSE live' : (overview?.statusMessage || 'Market closed')}
+                  </span>
+                  <span className="fd-num">{istDate} · {istTime} IST</span>
+                  <span>Welcome back, {displayName}</span>
+                </div>
+                <h1 id="fd-index-title" className="fd-index-name">{nifty?.name || 'NIFTY 50'} &nbsp;/&nbsp; Index level</h1>
+                <div className="fd-index-value" aria-live="polite">
+                  {isOverviewLoading && !nifty ? '—' : <>{niftyInt}{niftyDec && <small>.{niftyDec}</small>}</>}
+                </div>
+                {nifty && (
+                  <div className="fd-index-change">
+                    <span className="fd-num" style={{ color: niftyUp ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                      {niftyUp ? '▲' : '▼'} {signed(nifty.change)}
+                    </span>
+                    <span className="fd-num" style={{ color: niftyUp ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                      {signed(nifty.changePercent)}%
+                    </span>
+                    {Number.isFinite(nifty.previousClose) && (
+                      <span style={{ color: 'var(--text-dim)' }}>PREV CLOSE {formatNumber(nifty.previousClose, 2)}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
-              {/* Quick Add Funds in Header */}
+              <dl className="fd-readouts">
+                <div><dt className="fd-lbl">Day high</dt><dd>{nifty ? formatNumber(nifty.high, 2) : '—'}</dd></div>
+                <div><dt className="fd-lbl">Day low</dt><dd>{nifty ? formatNumber(nifty.low, 2) : '—'}</dd></div>
+                <div>
+                  <dt className="fd-lbl">Adv / Dec</dt>
+                  <dd>{breadth ? <>{formatNumber(breadth.advancing, 0)} <span style={{ color: 'var(--border-strong)' }}>/</span> {formatNumber(breadth.declining, 0)}</> : '—'}</dd>
+                </div>
+                <div><dt className="fd-lbl">Regime</dt><dd>Risk normal</dd></div>
+                <div>
+                  <dt className="fd-lbl">FII net · ₹ Cr</dt>
+                  <dd style={{ color: institutionalFlows.fiiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.fiiNet)}</dd>
+                </div>
+                <div>
+                  <dt className="fd-lbl">DII net · ₹ Cr</dt>
+                  <dd style={{ color: institutionalFlows.diiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.diiNet)}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {/* Intraday trajectory of the latest session */}
+            <figure className="fd-trajectory" aria-label={trace ? `${nifty?.name || 'NIFTY 50'} intraday trajectory, ${trace.date}` : 'Day range'}>
+              {trace ? (
+                <>
+                  <svg className="fd-trace" viewBox={`0 0 ${TRACE_W} ${TRACE_H}`} preserveAspectRatio="none" aria-hidden="true">
+                    {trace.prevY !== null && (
+                      <line x1="0" x2={TRACE_W} y1={trace.prevY} y2={trace.prevY} stroke="var(--border-strong)" strokeDasharray="2 6" vectorEffect="non-scaling-stroke" />
+                    )}
+                    <path className="fd-trace-fill" d={trace.fill} fill="var(--accent)" fillOpacity="0.07" />
+                    <path d={trace.line} fill="none" stroke="var(--fd-trace)" strokeWidth="1.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+                    <line x1={trace.endX * TRACE_W} x2={trace.endX * TRACE_W} y1="0" y2={TRACE_H} stroke="var(--accent)" strokeOpacity="0.45" vectorEffect="non-scaling-stroke" />
+                  </svg>
+                  <div className="fd-trace-overlay">
+                    <svg className="fd-now-ping" viewBox="0 0 40 40" style={{ left: `${trace.endX * 100}%`, top: `${trace.endY * 100}%` }} aria-hidden="true">
+                      <circle className="fd-ping" cx="20" cy="20" r="4" fill="none" stroke="var(--accent)" />
+                      <circle cx="20" cy="20" r="4" fill="var(--accent)" />
+                    </svg>
+                  </div>
+                  <span className="fd-lbl" style={{ left: 0, top: 0 }}>09:15 · Open · {trace.date}</span>
+                  <span className="fd-lbl fd-lbl--accent" style={{ left: `${trace.endX * 100}%`, top: 0, transform: trace.endX > 0.8 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)' }}>
+                    {isOpen ? 'Now' : 'Last'} · {formatNumber(trace.lastClose, 2)}
+                  </span>
+                  <div className="fd-axis fd-lbl">{AXIS_TICKS.map((t) => <span key={t}>{t}</span>)}</div>
+                </>
+              ) : nifty ? (
+                <>
+                  <span className="fd-lbl" style={{ left: 0, top: 0 }}>Day range · {formatNumber(nifty.low, 2)} – {formatNumber(nifty.high, 2)}</span>
+                  <div className="fd-range-rail"><span style={{ left: `${rangePos(nifty.value, nifty.low, nifty.high)}%` }} /></div>
+                </>
+              ) : null}
+            </figure>
+          </div>
+        </section>
+
+        {/* ── Command strip: other benchmarks + paper capital ── */}
+        <div className="fd-band">
+        <div className="fd-strip fd-wrap">
+          {isOverviewLoading && !stripIndices.length
+            ? [0, 1, 2].map((k) => <div key={k}><div className="fd-lbl">Loading</div><div className="fd-strip-value">—</div></div>)
+            : stripIndices.map((idx) => {
+                const up = idx.change >= 0;
+                return (
+                  <button key={idx.symbol} type="button" className="fd-strip-cell" onClick={() => navigate('/markets')}>
+                    <div className="fd-lbl">{idx.name}</div>
+                    <div className="fd-strip-value">{formatNumber(idx.value, 2)}</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px', marginTop: '6px' }}>
+                      <span className="fd-num" style={{ fontFamily: 'var(--font-mono)', fontSize: '12.5px', color: up ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                        {up ? '▲' : '▼'} {signed(idx.change)}&nbsp;&nbsp;{signed(idx.changePercent)}%
+                      </span>
+                      <span className="fd-mini-rail" title={`Day range ${formatNumber(idx.low, 2)} – ${formatNumber(idx.high, 2)}`}>
+                        <span style={{ left: `${rangePos(idx.value, idx.low, idx.high)}%` }} />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+          <div className="fd-capital">
+            <div className="fd-lbl">Paper capital</div>
+            <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+              <div><div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Cash</div><div className="fd-capital-value">₹{formatNumber(cashBalance, 0)}</div></div>
+              <div><div style={{ fontSize: '11.5px', color: 'var(--text-secondary)' }}>Total value</div><div className="fd-capital-value">₹{formatNumber(portfolioTotalValue, 0)}</div></div>
+            </div>
+            <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
               <button
                 type="button"
+                className="fd-btn fd-btn--solid fd-btn--sm"
                 onClick={() => addFundsMutation.mutate(100000)}
                 disabled={addFundsMutation.isPending}
                 title="Add ₹1L virtual trading cash"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '3px',
-                  padding: '4px 8px',
-                  borderRadius: 'var(--radius-xs)',
-                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
-                  color: 'var(--positive)',
-                  border: '1px solid rgba(16, 185, 129, 0.3)',
-                  fontSize: '11px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  marginLeft: '4px',
-                }}
               >
-                <PlusCircle size={11} />
-                <span>+₹1L</span>
+                + ₹1L
+              </button>
+              <button type="button" className="fd-btn fd-btn--sm fd-btn--icon" onClick={handleRefresh} title="Refresh quotes" aria-label="Refresh quotes">
+                <RefreshCw size={14} className={isRefreshing ? 'animate-spin' : ''} />
               </button>
             </div>
-
-            <button
-              className="btn-icon"
-              onClick={handleRefresh}
-              title="Refresh Quotes"
-              style={{
-                width: '38px',
-                height: '38px',
-                backgroundColor: 'var(--card-hover)',
-                border: '1px solid var(--border)',
-                borderRadius: 'var(--radius-sm)',
-                boxShadow: 'none'
-              }}
-            >
-              <RefreshCw size={15} className={isRefreshing ? 'animate-spin' : ''} />
-            </button>
           </div>
         </div>
-
-        {/* Benchmark Indices Grid */}
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.02em', margin: 0 }}>
-              Benchmark Indices
-            </h2>
-            <Link to="/markets" style={{ fontSize: 'var(--text-sm)', color: 'var(--accent)', fontWeight: 500 }}>
-              Explore markets &rarr;
-            </Link>
-          </div>
-
-          {isOverviewLoading ? (
-            <div className="benchmark-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '12px' }}>
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
-              <CardSkeleton />
-            </div>
-          ) : (
-            <div className="benchmark-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '12px' }}>
-              {overview?.indices?.map((idx) => (
-                <IndexCard key={idx.symbol} index={idx} onClick={() => navigate('/markets')} />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* Institutional Command Telemetry Ribbon */}
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))',
-          gap: '12px',
-        }}>
-          {/* Turnover Telemetry Card */}
-          <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Market Turnover (Cash &amp; F&amp;O)
-              </span>
-              <span className="badge badge--neutral" style={{ fontSize: '10px' }}>NSE + BSE</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                {turnover.totalCash}
-              </span>
-              <span style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>Cash</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
-              <span>NSE Cash: <strong style={{ color: 'var(--text-primary)' }}>{turnover.nseCash}</strong></span>
-              <span>F&amp;O Notional: <strong style={{ color: 'var(--accent-bright)' }}>{turnover.nseFo}</strong></span>
-            </div>
-          </div>
-
-          {/* FII / DII Institutional Flows Card */}
-          <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                FII &amp; DII Institutional Flow
-              </span>
-              <span className="badge badge--positive" style={{ fontSize: '10px' }}>NET BUYERS</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>FII NET</div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: institutionalFlows.fiiNet >= 0 ? 'var(--positive)' : 'var(--negative)', fontFamily: 'var(--font-mono)' }}>
-                  {institutionalFlows.fiiNet >= 0 ? '+' : ''}₹{formatIndianNumber(institutionalFlows.fiiNet)} Cr
-                </div>
-              </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)' }}>DII NET</div>
-                <div style={{ fontSize: '15px', fontWeight: 700, color: institutionalFlows.diiNet >= 0 ? 'var(--positive)' : 'var(--negative)', fontFamily: 'var(--font-mono)' }}>
-                  {institutionalFlows.diiNet >= 0 ? '+' : ''}₹{formatIndianNumber(institutionalFlows.diiNet)} Cr
-                </div>
-              </div>
-            </div>
-            {/* Visual Net Accumulation Track */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '10.5px', color: 'var(--positive)' }}>
-              <TrendingUp size={12} />
-              <span>Total Institutional Inflow: <strong>+₹{formatIndianNumber(institutionalFlows.fiiNet + institutionalFlows.diiNet)} Cr</strong></span>
-            </div>
-          </div>
-
-          {/* Volatility & Regime Radar */}
-          <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                Volatility &amp; Market Regime
-              </span>
-              <span className="badge badge--accent" style={{ fontSize: '10px' }}>RISK NORMAL</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                INDIA VIX: 12.85
-              </span>
-              <span style={{ fontSize: '12px', color: 'var(--positive)', fontWeight: 600 }}>-3.16%</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '11.5px', color: 'var(--text-muted)', borderTop: '1px solid var(--border-subtle)', paddingTop: '6px' }}>
-              <span>Regime: <strong style={{ color: 'var(--positive)' }}>Low Volatility Bullish</strong></span>
-              <span>PCR: <strong style={{ color: 'var(--accent-bright)' }}>1.15</strong></span>
-            </div>
-          </div>
         </div>
 
-        {/* ========================================================================= */}
-        {/* EXECUTIVE INTELLIGENCE & BREAKING MARKET WIRE (PROMINENT TOP SECTION)      */}
-        {/* ========================================================================= */}
-        <section>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <Sparkles size={16} color="var(--accent-bright)" />
-              <h2 style={{ fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '0.02em', margin: 0 }}>
-                Research &amp; market news
-              </h2>
-            </div>
-            <span className="badge badge--accent" style={{ fontSize: '10.5px' }}>
-              MARKET INTELLIGENCE
-            </span>
-          </div>
+        <div className="fd-band">
+        <nav className="fd-routes fd-wrap" aria-label="Quick routes">
+          <Link to="/trade" className="fd-route">Paper trading <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
+          <Link to="/markets" className="fd-route">Screener &amp; heatmap <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
+          <Link to="/ai" className="fd-route">Pulse AI research <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
+        </nav>
+        </div>
 
-          <div className="research-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
-            {/* Left: Pulse AI Post-Market Intelligence Suite (Last Day Wrap, Overnight Feed, Pivots) */}
-            <div>
-              <AISummaryCard />
+        <div className="fd-wrap">
+          {/* ── 01 Market state ─────────────────────────────── */}
+          <section className="fd-section fd-reveal">
+            <div className="fd-section-head">
+              <span className="fd-lbl fd-lbl--accent">01</span>
+              <h2 className="fd-h2">Market state</h2>
+              <span className="fd-lbl">Flows · {institutionalFlows.date}</span>
             </div>
+            <div className="fd-panes fd-panes--3">
+              <div className="fd-pane">
+                <div className="fd-lbl">Cash turnover · NSE + BSE</div>
+                <div className="fd-big">{turnover.totalCash}</div>
+                <dl className="fd-dl">
+                  <dt>NSE cash</dt><dd>{turnover.nseCash}</dd>
+                  <dt>BSE cash</dt><dd>{turnover.bseCash}</dd>
+                  <dt>F&amp;O notional</dt><dd>{turnover.nseFo}</dd>
+                  <dt>Total trades</dt><dd>{turnover.totalTrades}</dd>
+                </dl>
+              </div>
 
-            {/* Right: Breaking Market Wire */}
-            <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '8px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Newspaper size={15} color="var(--accent-bright)" />
-                  <span style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>Breaking Market Wire</span>
+              <div className="fd-pane">
+                <div className="fd-pane-head">
+                  <span className="fd-lbl">Institutional flows · ₹ Cr</span>
+                  <span className="fd-lbl" style={{ color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                    {totalInflow >= 0 ? 'Net buyers' : 'Net sellers'}
+                  </span>
                 </div>
-                <Link to="/news" style={{ fontSize: '11.5px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
-                  All news &rarr;
-                </Link>
+                <div className="fd-big" style={{ color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(totalInflow)}</div>
+                {[
+                  ['FII', institutionalFlows.fiiNet, institutionalFlows.fiiBuy, institutionalFlows.fiiSell],
+                  ['DII', institutionalFlows.diiNet, institutionalFlows.diiBuy, institutionalFlows.diiSell],
+                ].map(([label, net, buy, sell]) => (
+                  <div className="fd-flow" key={label}>
+                    <div className="fd-flow-head">
+                      <span>{label}</span>
+                      <span className="fd-num" style={{ fontFamily: 'var(--font-mono)', color: net >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(net)}</span>
+                    </div>
+                    <div className="fd-flow-bar" aria-hidden="true"><span style={{ flex: buy || 1 }} /><span style={{ flex: sell || 1 }} /></div>
+                    <div className="fd-flow-foot fd-num"><span>BUY {formatNumber(buy, 2)}</span><span>SELL {formatNumber(sell, 2)}</span></div>
+                  </div>
+                ))}
               </div>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {marketNews.length > 0 ? (
-                  marketNews.slice(0, 5).map((article) => (
-                    <a
-                      key={article.id}
-                      href={article.sourceUrl || '#'}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="card--interactive dashboard-news-item"
-                      style={{
-                        padding: '10px 12px',
-                        backgroundColor: 'var(--surface)',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid var(--border-subtle)',
-                        textDecoration: 'none',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '5px',
-                        transition: 'all var(--transition-fast)',
-                      }}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{ fontSize: '10.5px', fontWeight: 600, color: 'var(--accent-bright)' }}>
-                            {article.source}
-                          </span>
-                          <span style={{ fontSize: '10.5px', color: 'var(--text-muted)' }}>•</span>
-                          <span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
-                            {new Date(article.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                        <span
-                          className={`badge ${
-                            article.sentiment === 'positive' ? 'badge--positive' :
-                            article.sentiment === 'negative' ? 'badge--negative' :
-                            'badge--neutral'
-                          }`}
-                          style={{ fontSize: '9.5px', padding: '1px 6px', textTransform: 'uppercase' }}
-                        >
-                          {article.sentiment || 'neutral'}
-                        </span>
-                      </div>
-
-                      <div style={{ fontSize: '12.5px', fontWeight: 500, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                        {article.title}
-                      </div>
-
-                      {article.relatedSymbols && article.relatedSymbols.length > 0 && (
-                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '2px' }}>
-                          {article.relatedSymbols.slice(0, 2).map(sym => (
-                            <span key={sym} style={{ fontSize: '10px', color: 'var(--accent)', backgroundColor: 'rgba(59, 130, 246, 0.1)', padding: '1px 5px', borderRadius: '3px' }}>
-                              #{sym.replace('NSE:', '')}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </a>
-                  ))
-                ) : (
-                  <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', padding: '10px' }}>Loading financial news feed...</div>
-                )}
+              <div className="fd-pane">
+                <div className="fd-pane-head">
+                  <span className="fd-lbl">Volatility &amp; regime</span>
+                  <span className="fd-lbl fd-lbl--accent">Risk normal</span>
+                </div>
+                <div className="fd-regime-word">Low volatility,<br />bullish</div>
+                <div className="fd-scale" aria-label={`India VIX ${formatNumber(vixValue, 2)} on a ${VIX_MIN} to ${VIX_MAX} scale`}>
+                  <div className="fd-scale-track" aria-hidden="true">
+                    {Array.from({ length: 10 }, (_, k) => <span key={k} className={(k + 0.5) * 10 <= vixPos ? 'on' : ''} />)}
+                  </div>
+                  <span className="fd-scale-marker" style={{ left: `calc(${vixPos}% - 1px)` }} aria-hidden="true" />
+                  <div className="fd-scale-legend fd-lbl"><span>VIX {VIX_MIN} · calm</span><span>{VIX_MAX} · stressed</span></div>
+                </div>
+                <dl className="fd-dl">
+                  <dt>India VIX</dt>
+                  <dd>{formatNumber(vixValue, 2)} <span style={{ color: vixChange >= 0 ? 'var(--negative-text)' : 'var(--positive-text)' }}>{signed(vixChange)}%</span></dd>
+                  <dt>Put / call ratio</dt><dd>{formatNumber(pcr, 2)}</dd>
+                  {Number.isFinite(overview?.derivatives?.maxPain) && <><dt>Max pain</dt><dd>{formatNumber(overview.derivatives.maxPain, 0)}</dd></>}
+                  {Number.isFinite(overview?.derivatives?.atmIv) && <><dt>ATM IV</dt><dd>{formatNumber(overview.derivatives.atmIv, 1)}%</dd></>}
+                </dl>
               </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* Market Breadth */}
-        <section>
-          {overview?.breadth && <MarketBreadthBar breadth={overview.breadth} />}
-        </section>
+          {/* ── 02 Participation ────────────────────────────── */}
+          <section className="fd-section fd-reveal">
+            <div className="fd-section-head">
+              <span className="fd-lbl fd-lbl--accent">02</span>
+              <h2 className="fd-h2">Participation</h2>
+              <Link to="/markets" className="fd-link-lbl">Sector heatmap →</Link>
+            </div>
+            <div className="fd-panes fd-panes--2">
+              {breadth ? <MarketBreadthBar breadth={breadth} /> : <div className="fd-pane fd-empty">Breadth loads with the market overview.</div>}
+              {overview?.sectors?.length ? <SectorBar sectors={overview.sectors} /> : <div className="fd-pane fd-empty">Sector data loads with the market overview.</div>}
+            </div>
+          </section>
 
-        {/* Two-Column Terminal Layout: Movers on Left, Sector Rotation on Right */}
-        <div className="market-analysis-grid" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)', gap: '16px', alignItems: 'start' }}>
-          {/* Left Column: Intraday Market Movers & Institutional Activity */}
-          <div className="card card-padded" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* Tab Controls */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', flexWrap: 'wrap', gap: '8px' }}>
-              <div className="tab-group">
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('gainers')}
-                  className={`tab-pill${activeTab === 'gainers' ? ' tab-pill--positive' : ''}`}
-                >
-                  <TrendingUp size={13} />
-                  <span>Top Gainers ({gainers.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('losers')}
-                  className={`tab-pill${activeTab === 'losers' ? ' tab-pill--negative' : ''}`}
-                >
-                  <TrendingDown size={13} />
-                  <span>Top Losers ({losers.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('active')}
-                  className={`tab-pill${activeTab === 'active' ? ' tab-pill--accent' : ''}`}
-                >
-                  <Activity size={13} />
-                  <span>Volume Shockers ({active.length})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('breakouts')}
-                  className={`tab-pill${activeTab === 'breakouts' ? ' tab-pill--active' : ''}`}
-                >
-                  <Flame size={13} />
-                  <span>52W Breakouts ({breakouts.length})</span>
-                </button>
+          {/* ── 03 Movers ───────────────────────────────────── */}
+          <section className="fd-section fd-reveal">
+            <div className="fd-movers-head">
+              <span className="fd-lbl fd-lbl--accent">03</span>
+              <h2 className="fd-h2">Movers</h2>
+              <div className="tab-group" role="tablist" aria-label="Movers">
+                {moverTabs.map(({ id, label, icon: Icon, count }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeTab === id}
+                    onClick={() => setActiveTab(id)}
+                    className={`tab-pill${activeTab === id ? ' tab-pill--active' : ''}`}
+                  >
+                    <Icon size={13} />
+                    <span>{label} ({count})</span>
+                  </button>
+                ))}
               </div>
-
-              <Link to="/markets" style={{ fontSize: '11.5px', color: 'var(--accent)', textDecoration: 'none', fontWeight: 500 }}>
-                Full Screener &rarr;
-              </Link>
+              <Link to="/markets" className="fd-link-lbl">Full screener →</Link>
             </div>
 
-            {/* High-Fidelity Stock Movers Table */}
-            <div style={{ overflowX: 'auto' }}>
-              <table className="data-table dashboard-movers-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '12.5px' }}>
+            <div className="fd-table-box">
+              <table className="fd-table">
                 <thead>
-                  <tr style={{ borderBottom: '1px solid var(--border)', color: 'var(--text-muted)', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    <th style={{ padding: '8px 12px', fontWeight: 600 }}>Instrument</th>
-                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>LTP</th>
-                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>24h Change</th>
-                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Day Range</th>
-                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Volume</th>
-                    <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'center' }}>Action</th>
+                  <tr>
+                    <th>Instrument</th>
+                    <th className="r">LTP</th>
+                    <th className="r">Change</th>
+                    <th>Day range</th>
+                    <th className="r">Volume</th>
+                    <th className="r">Action</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isGainersLoading || isLosersLoading || isActiveLoading ? (
-                    <tr>
-                      <td colSpan={6} style={{ padding: '20px' }}>
-                        <TableSkeleton rows={8} />
-                      </td>
-                    </tr>
+                    <tr><td colSpan={6} style={{ padding: '20px' }}><TableSkeleton rows={8} /></td></tr>
+                  ) : displayList.length === 0 ? (
+                    <tr><td colSpan={6} className="fd-empty">No instruments in this list right now.</td></tr>
                   ) : (
-                    (() => {
-                      const displayList = 
-                        activeTab === 'gainers' ? gainers :
-                        activeTab === 'losers' ? losers :
-                        activeTab === 'active' ? active :
-                        breakouts;
-
-                      return displayList.slice(0, 10).map((s) => {
-                        const isPositive = s.change >= 0;
-                        const low = s.low || (s.ltp * 0.98);
-                        const high = s.high || (s.ltp * 1.02);
-                        const rangeSpan = Math.max(0.01, high - low);
-                        const progressPct = Math.min(100, Math.max(0, ((s.ltp - low) / rangeSpan) * 100));
-
-                        return (
-                          <tr 
-                            key={s.symbol}
-                            style={{ 
-                              borderBottom: '1px solid var(--border-subtle)', 
-                              transition: 'background-color var(--transition-fast)',
-                              cursor: 'pointer',
-                            }}
-                            className="stock-table-row"
-                            onClick={() => navigate(`/stocks/${encodeURIComponent(s.symbol)}`)}
-                          >
-                            {/* Instrument + Logo */}
-                            <td style={{ padding: '10px 12px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <CompanyLogo symbol={s.symbol} name={s.name} size={30} />
-                                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                  <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
-                                    {s.symbol.replace('NSE:', '').replace('BSE:', '')}
-                                  </span>
-                                  <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                    {s.name}
-                                  </span>
-                                </div>
+                    displayList.slice(0, 10).map((s) => {
+                      const isPositive = s.change >= 0;
+                      const low = s.low || (s.ltp * 0.98);
+                      const high = s.high || (s.ltp * 1.02);
+                      const progressPct = rangePos(s.ltp, low, high);
+                      return (
+                        <tr key={s.symbol} className="stock-table-row" onClick={() => navigate(`/stocks/${encodeURIComponent(s.symbol)}`)}>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                              <CompanyLogo symbol={s.symbol} name={s.name} size={32} />
+                              <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                                <span style={{ fontWeight: 500 }}>{s.symbol.replace('NSE:', '').replace('BSE:', '')}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-dim)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
                               </div>
-                            </td>
-
-                            {/* LTP */}
-                            <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-primary)' }}>
-                              {formatINR(s.ltp)}
-                            </td>
-
-                            {/* 24h Change */}
-                            <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                              <span
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '2px 8px',
-                                  borderRadius: 'var(--radius-xs)',
-                                  fontSize: '11.5px',
-                                  fontWeight: 600,
-                                  fontFamily: 'var(--font-mono)',
-                                  backgroundColor: isPositive ? 'rgba(16, 185, 129, 0.14)' : 'rgba(244, 63, 94, 0.14)',
-                                  color: isPositive ? 'var(--positive)' : 'var(--negative)',
-                                  border: `1px solid ${isPositive ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}`,
-                                }}
-                              >
-                                {isPositive ? '+' : ''}{s.changePercent?.toFixed(2)}%
-                              </span>
-                            </td>
-
-                            {/* Day Range Mini-Bar */}
-                            <td style={{ padding: '10px 12px', textAlign: 'right', minWidth: '110px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-                                <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', position: 'relative' }}>
-                                  <div 
-                                    style={{ 
-                                      position: 'absolute', 
-                                      left: `${progressPct}%`, 
-                                      top: '-2px', 
-                                      width: '8px', 
-                                      height: '8px', 
-                                      borderRadius: '50%', 
-                                      backgroundColor: isPositive ? 'var(--positive)' : 'var(--negative)',
-                                      transform: 'translateX(-50%)',
-                                      boxShadow: 'none',
-                                    }} 
-                                  />
-                                </div>
-                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                  L: {formatIndianNumber(Math.round(low))} - H: {formatIndianNumber(Math.round(high))}
-                                </span>
-                              </div>
-                            </td>
-
-                            {/* Volume */}
-                            <td style={{ padding: '10px 12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                              {formatIndianNumber(s.volume || 1000000)}
-                            </td>
-
-                            {/* Action: Fast Trade */}
-                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(`/trade?symbol=${encodeURIComponent(s.symbol)}`);
-                                }}
-                                style={{
-                                  padding: '4px 10px',
-                                  fontSize: '11px',
-                                  fontWeight: 600,
-                                  borderRadius: 'var(--radius-xs)',
-                                  backgroundColor: 'rgba(59, 130, 246, 0.12)',
-                                  color: 'var(--accent-bright)',
-                                  border: '1px solid rgba(59, 130, 246, 0.3)',
-                                  cursor: 'pointer',
-                                  transition: 'all var(--transition-fast)',
-                                }}
-                              >
-                                Trade
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      });
-                    })()
+                            </div>
+                          </td>
+                          <td className="r mono">{formatINR(s.ltp)}</td>
+                          <td className="r mono" style={{ color: isPositive ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                            {isPositive ? '▲ +' : '▼ '}{s.changePercent?.toFixed(2)}%
+                          </td>
+                          <td>
+                            <div className="fd-range">
+                              <span>{formatNumber(low, 2)}</span>
+                              <span className="fd-range-track"><span style={{ left: `${progressPct}%` }} /></span>
+                              <span>{formatNumber(high, 2)}</span>
+                            </div>
+                          </td>
+                          <td className="r mono" style={{ color: 'var(--text-secondary)' }}>{formatVolume(s.volume || 1000000)}</td>
+                          <td className="r">
+                            <button
+                              type="button"
+                              className="fd-btn fd-btn--sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/trade?symbol=${encodeURIComponent(s.symbol)}`);
+                              }}
+                            >
+                              Trade
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
-          </div>
+          </section>
 
-          {/* Right Column: Sector Rotation & Screener Card */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Sector Performance Rotation */}
-            {overview?.sectors && <SectorBar sectors={overview.sectors} />}
-
-            {/* Quick Institutional Screener Callout */}
-            <div 
-              className="card card-padded"
-              style={{
-                background: 'var(--surface)',
-                border: '1px solid rgba(59, 130, 246, 0.2)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '10px',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <BarChart3 size={15} color="var(--accent-bright)" />
-                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Sector Heatmap &amp; Treemap
-                  </span>
-                </div>
-                <span className="badge badge--accent" style={{ fontSize: '9.5px' }}>INTERACTIVE</span>
+          {/* ── 04 Wire + Pulse AI brief ────────────────────── */}
+          <section className="fd-section fd-wire-grid fd-reveal">
+            <div className="fd-wire">
+              <div className="fd-section-head">
+                <span className="fd-lbl fd-lbl--accent">04</span>
+                <h2 className="fd-h2">Market wire</h2>
+                <Link to="/news" className="fd-link-lbl">All news →</Link>
               </div>
-              <p style={{ fontSize: '12px', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
-                Visualize relative performance across Banking, IT, Energy, Auto, and Pharma sectors with size proportional to market capitalization.
-              </p>
-              <Link
-                to="/markets"
-                className="btn btn-secondary"
-                style={{ padding: '8px 12px', fontSize: '12px', alignSelf: 'flex-start', marginTop: '4px', gap: '6px' }}
-              >
-                <span>Explore sector heatmap</span>
-                <ArrowRight size={13} />
-              </Link>
+              {marketNews.length > 0 ? (
+                <ol className="fd-wire-list">
+                  {marketNews.slice(0, 5).map((article) => (
+                    <li key={article.id}>
+                      <a href={article.sourceUrl || '#'} target="_blank" rel="noopener noreferrer" className="fd-wire-item">
+                        <span className="fd-num" style={{ fontFamily: 'var(--font-mono)', fontSize: '12px', color: 'var(--text-dim)' }}>
+                          {new Date(article.publishedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span>
+                          <span className="fd-wire-title">{article.title}</span>
+                          <span className="fd-wire-src">
+                            {article.source}
+                            {article.relatedSymbols?.length > 0 && ` · ${article.relatedSymbols.slice(0, 2).map((sym) => sym.replace('NSE:', '')).join(' · ')}`}
+                          </span>
+                        </span>
+                        <span className={`badge ${article.sentiment === 'positive' ? 'badge--positive' : article.sentiment === 'negative' ? 'badge--negative' : 'badge--neutral'}`}>
+                          {article.sentiment || 'neutral'}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="fd-wire-list fd-empty">Loading financial news feed…</div>
+              )}
             </div>
-          </div>
+            <aside className="fd-brief" aria-label="Pulse AI market brief">
+              <AISummaryCard />
+            </aside>
+          </section>
+
+          <footer className="fd-foot fd-lbl">
+            <span>Quotes NSE · BSE via Upstox &nbsp;/&nbsp; News via Marketaux</span>
+            <span>Paper trading only · Not investment advice</span>
+          </footer>
         </div>
       </div>
     </ErrorBoundary>

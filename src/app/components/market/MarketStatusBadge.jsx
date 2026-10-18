@@ -15,13 +15,6 @@ export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compac
     ? 'var(--accent)'
     : 'var(--text-muted)';
 
-  const bgColor = isLive
-    ? 'var(--positive-muted)'
-    : isPre
-    ? 'var(--warning-muted)'
-    : isPost
-    ? 'var(--accent-muted)'
-    : 'var(--card)';
 
   const borderColor = isLive
     ? 'var(--positive-border)'
@@ -46,13 +39,15 @@ export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compac
         alignItems: 'center',
         gap: '6px',
         padding: compact ? '2px 7px' : '4px 10px',
-        borderRadius: 'var(--radius-xs)',
-        backgroundColor: bgColor,
+        borderRadius: 0,
+        backgroundColor: 'transparent',
         border: `1px solid ${borderColor}`,
-        fontSize: compact ? '10px' : '11px',
-        fontWeight: 700,
+        fontFamily: 'var(--font-mono)',
+        fontSize: compact ? '10px' : '10.5px',
+        fontWeight: 400,
         color: dotColor,
-        letterSpacing: '0.04em',
+        letterSpacing: '0.14em',
+        whiteSpace: 'nowrap',
         boxShadow: 'none',
       }}
       title={nextEvent || reason || label}

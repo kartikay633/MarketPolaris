@@ -60,7 +60,7 @@ export function TopBar() {
           onClick={() => setIsSearchOpen(true)}
         >
           <Search size={14} color="var(--text-muted)" />
-          <span className="topbar-search-placeholder">Search NSE/BSE stocks, indices...</span>
+          <span className="topbar-search-placeholder">Search NSE / BSE</span>
           <span className="topbar-kbd">{shortcutKey}</span>
         </button>
 
@@ -78,7 +78,6 @@ export function TopBar() {
             aria-label={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
             onClick={handleToggleTheme}
-            style={{ color: theme === 'dark' ? '#F59E0B' : '#3B82F6' }}
           >
             {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
           </button>

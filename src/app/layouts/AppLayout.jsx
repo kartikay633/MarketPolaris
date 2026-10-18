@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
@@ -8,18 +8,19 @@ import FloatingAIWidget from '../components/ai/FloatingAIWidget';
 export default function AppLayout() {
   return (
     <div className="app-layout">
-      {/* Persistent Left Sidebar */}
-      <Sidebar />
-
-      {/* Main Content Area */}
       <div className="app-main-wrapper">
-        {/* Persistent Sticky Terminal Header (TopBar + Live NSE/BSE Feed) */}
+        {/* Sticky flight-deck bar: brand, routes, terminal controls, live feed */}
         <div className="app-header-area">
-          <TopBar />
+          <div className="fd-bar">
+            <Sidebar />
+            <TopBar />
+          </div>
           <MarketTickerTape />
         </div>
         <main className="app-main-content">
-          <Outlet />
+          <Suspense fallback={<div className="app-page-loading" aria-busy="true" />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
 
