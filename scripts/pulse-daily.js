@@ -15,22 +15,30 @@ const startedAt=new Date().toISOString();
 const log=createWriteStream(path.join(logDir,`daily-${startedAt.slice(0,7)}.log`),{flags:'a'});
 const write=line=>log.write(`[${new Date().toISOString()}] ${line}\n`);
 
-function run(mode) {
+function run(mode,script='scripts/pulse-run.js') {
   return new Promise(resolve=>{
-    write(`> pulse-run ${mode}`);
-    const child=spawn(process.execPath,['scripts/pulse-run.js',mode],{cwd:root,windowsHide:true,shell:false});
+    write(`> ${path.basename(script,'.js')} ${mode}`);
+    const child=spawn(process.execPath,[script,mode],{cwd:root,windowsHide:true,shell:false});
     child.stdout.pipe(log,{end:false});
     child.stderr.pipe(log,{end:false});
     child.on('error',error=>{write(`spawn failed: ${error.message}`);resolve(1);});
-    child.on('close',code=>{write(`< pulse-run ${mode} exited ${code}`);resolve(code??1);});
+    child.on('close',code=>{write(`< ${path.basename(script,'.js')} ${mode} exited ${code}`);resolve(code??1);});
   });
 }
 
 const steps={};
-steps.update=await run('update');
+// A dropped provider connection should not cost a session: retry the update twice, 10 minutes apart.
+for(let attempt=1;attempt<=3;attempt++) {
+  steps.update=await run('update');
+  if(steps.update===0||attempt===3) break;
+  write(`update failed; retrying in 10 minutes (attempt ${attempt+1} of 3)`);
+  await new Promise(resolve=>setTimeout(resolve,10*60*1000));
+}
 // Scoring only reads matured ledger entries, so it still runs if today's update failed.
 steps.forward=await run('forward');
-const ok=steps.update===0&&steps.forward===0;
+// Planner forward test: record today's model portfolios only from fresh outlooks; always score matured ones.
+steps.advisor=await run(steps.update===0?'all':'score','scripts/pulse-advisor.js');
+const ok=steps.update===0&&steps.forward===0&&steps.advisor===0;
 const status={startedAt,finishedAt:new Date().toISOString(),status:ok?'ok':'failed',steps};
 await mkdir(path.join(dataDir,'reports'),{recursive:true});
 const target=path.join(dataDir,'reports/daily-run.json');
