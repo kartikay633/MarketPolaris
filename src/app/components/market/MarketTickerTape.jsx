@@ -1,20 +1,27 @@
 // Institutional Live Financial Ticker Tape Component
 import React from 'react';
-import { useMarketOverview } from '../../hooks/useMarketData';
+import { useQueries } from '@tanstack/react-query';
+import { useMarketOverview, stockQuoteQuery } from '../../hooks/useMarketData';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 // Each half of the marquee needs enough items to span the track, otherwise
 // the -50% scroll loop leaves a visible gap.
 const MIN_ITEMS_PER_LOOP = 8;
 
-function toTicker(idx) {
-  const value = Number(idx.value);
+const LARGE_CAPS = ['RELIANCE', 'HDFCBANK', 'TCS', 'INFY', 'ICICIBANK', 'BHARTIARTL'];
+
+// The API marks each index and quote with `source`; anything not served live
+// by the market feed (including responses without the marker) is not shown.
+const isLive = (row) => row?.source === 'live';
+
+function toTicker(symbol, rawValue, rawChangePercent, prefix = '') {
+  const value = Number(rawValue);
   if (!Number.isFinite(value) || value <= 0) return null;
-  const changePercent = Number(idx.changePercent);
+  const changePercent = Number(rawChangePercent);
   const hasChange = Number.isFinite(changePercent);
   return {
-    symbol: idx.name || idx.symbol,
-    price: value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    symbol,
+    price: `${prefix}${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
     change: hasChange ? `${changePercent >= 0 ? '+' : ''}${changePercent.toFixed(2)}%` : null,
     isPos: hasChange ? changePercent >= 0 : true,
   };
@@ -22,9 +29,20 @@ function toTicker(idx) {
 
 export function MarketTickerTape() {
   const { data: overview } = useMarketOverview();
+  const quotes = useQueries({
+    queries: LARGE_CAPS.map((symbol) => ({
+      ...stockQuoteQuery(symbol),
+      refetchInterval: (query) => (query.state.data?.marketStatus === 'OPEN' ? 30000 : 120000),
+    })),
+  });
 
-  // Only data served by the market feed is shown; never placeholder prices.
-  const tickers = (overview?.indices || []).map(toTicker).filter(Boolean);
+  const tickers = [
+    ...(overview?.indices || [])
+      .filter(isLive)
+      .map((idx) => toTicker(idx.name || idx.symbol, idx.value, idx.changePercent)),
+    ...quotes
+      .map((q, i) => (isLive(q.data) ? toTicker(LARGE_CAPS[i], q.data.ltp, q.data.changePercent, '₹') : null)),
+  ].filter(Boolean);
 
   if (!tickers.length) {
     return (

@@ -66,8 +66,9 @@ export function useActive(limit = 10) {
   });
 }
 
-export function useStockQuote(symbol) {
-  return useQuery({
+// Shared query options so useQueries callers reuse the ['stock', symbol] cache
+export function stockQuoteQuery(symbol) {
+  return {
     queryKey: ['stock', symbol],
     queryFn: async () => {
       if (!symbol) return null;
@@ -76,5 +77,9 @@ export function useStockQuote(symbol) {
     },
     enabled: Boolean(symbol),
     staleTime: 15000,
-  });
+  };
+}
+
+export function useStockQuote(symbol) {
+  return useQuery(stockQuoteQuery(symbol));
 }

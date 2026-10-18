@@ -46,6 +46,13 @@ const RAW_MAPPINGS = {
   TECHM: 'NSE_EQ|INE669C01036',
 };
 
+// Every index, quote and overview payload carries `source`, set by the code path
+// that produced it: 'live' for an Upstox response, 'fallback' for built-in values.
+export const SOURCE_LIVE = 'live';
+export const SOURCE_FALLBACK = 'fallback';
+
+const markFallback = (rows) => rows.map((row) => ({ ...row, source: SOURCE_FALLBACK }));
+
 // Build lookup map supporting 'RELIANCE', 'NSE:RELIANCE', 'BSE:RELIANCE'
 const SYMBOL_TO_INSTRUMENT_KEY = {};
 for (const [key, val] of Object.entries(RAW_MAPPINGS)) {
@@ -116,10 +123,22 @@ export class UpstoxProvider extends MarketDataProvider {
       sentiment: 'Bullish (PCR > 1.0)',
     };
 
+    // Only indices can come from Upstox; the remaining blocks are always built-in.
+    const sources = {
+      indices: indices.length > 0 && indices.every((idx) => idx.source === SOURCE_LIVE) ? SOURCE_LIVE : SOURCE_FALLBACK,
+      breadth: SOURCE_FALLBACK,
+      sectors: SOURCE_FALLBACK,
+      turnover: SOURCE_FALLBACK,
+      institutionalFlows: SOURCE_FALLBACK,
+      derivatives: SOURCE_FALLBACK,
+    };
+
     return {
       status: marketState.status,
       statusMessage: marketState.reason,
       timestamp: new Date().toISOString(),
+      source: Object.values(sources).every((s) => s === SOURCE_LIVE) ? SOURCE_LIVE : SOURCE_FALLBACK,
+      sources,
       indices,
       breadth,
       sectors,
@@ -178,6 +197,7 @@ export class UpstoxProvider extends MarketDataProvider {
         high: quote.ohlc?.high || 0,
         low: quote.ohlc?.low || 0,
         previousClose: prevClose,
+        source: SOURCE_LIVE,
       });
     }
 
@@ -189,7 +209,7 @@ export class UpstoxProvider extends MarketDataProvider {
   }
 
   _getFallbackIndices() {
-    return [
+    return markFallback([
       {
         symbol: 'NIFTY_50',
         name: 'NIFTY 50',
@@ -234,7 +254,7 @@ export class UpstoxProvider extends MarketDataProvider {
         low: 12.60,
         previousClose: 13.27,
       },
-    ];
+    ]);
   }
 
   async getGainers(limit = 20) {
@@ -255,7 +275,7 @@ export class UpstoxProvider extends MarketDataProvider {
       { symbol: 'NSE:M&M', name: 'Mahindra & Mahindra', ltp: 2850.00, change: 24.50, changePercent: 0.87, volume: 4100000, high: 2875.00, low: 2828.00, fiftyTwoWeekHigh: 3175.00, fiftyTwoWeekLow: 1475.00, sector: 'Automobiles & Mobility', marketCap: '₹3.54T' },
       { symbol: 'NSE:WIPRO', name: 'Wipro Limited', ltp: 520.00, change: 3.10, changePercent: 0.60, volume: 8800000, high: 524.50, low: 516.00, fiftyTwoWeekHigh: 580.00, fiftyTwoWeekLow: 375.00, sector: 'Technology & Software', marketCap: '₹2.72T' },
     ];
-    return mockGainers.slice(0, limit);
+    return markFallback(mockGainers.slice(0, limit));
   }
 
   async getLosers(limit = 20) {
@@ -273,7 +293,7 @@ export class UpstoxProvider extends MarketDataProvider {
       { symbol: 'NSE:ONGC', name: 'ONGC Limited', ltp: 295.40, change: -2.10, changePercent: -0.71, volume: 15600000, high: 299.00, low: 293.50, fiftyTwoWeekHigh: 344.00, fiftyTwoWeekLow: 179.00, sector: 'Energy & Power', marketCap: '₹3.72T' },
       { symbol: 'NSE:TITAN', name: 'Titan Company Ltd', ltp: 3420.00, change: -22.00, changePercent: -0.64, volume: 2900000, high: 3450.00, low: 3405.00, fiftyTwoWeekHigh: 3886.95, fiftyTwoWeekLow: 3055.00, sector: 'Consumer Goods & FMCG', marketCap: '₹3.04T' },
     ];
-    return mockLosers.slice(0, limit);
+    return markFallback(mockLosers.slice(0, limit));
   }
 
   async getActive(limit = 20) {
@@ -292,7 +312,7 @@ export class UpstoxProvider extends MarketDataProvider {
       { symbol: 'NSE:COALINDIA', name: 'Coal India Ltd', ltp: 488.50, change: -7.10, changePercent: -1.43, volume: 12800000, high: 497.00, low: 485.20, fiftyTwoWeekHigh: 527.40, fiftyTwoWeekLow: 275.00, sector: 'Energy & Power', marketCap: '₹3.01T' },
       { symbol: 'NSE:BHARTIARTL', name: 'Bharti Airtel Ltd', ltp: 1610.40, change: 26.20, changePercent: 1.65, volume: 11200000, high: 1622.00, low: 1585.00, fiftyTwoWeekHigh: 1690.00, fiftyTwoWeekLow: 890.00, sector: 'Telecom & Infrastructure', marketCap: '₹9.42T' },
     ];
-    return mockActive.slice(0, limit);
+    return markFallback(mockActive.slice(0, limit));
   }
 
   async getQuote(symbol) {
@@ -341,6 +361,7 @@ export class UpstoxProvider extends MarketDataProvider {
               industry: 'Equities',
               marketStatus: marketState.status,
               lastUpdated: new Date().toISOString(),
+              source: SOURCE_LIVE,
             };
           }
         }
@@ -459,6 +480,7 @@ export class UpstoxProvider extends MarketDataProvider {
       ...quote,
       marketStatus: marketState.status,
       lastUpdated: new Date().toISOString(),
+      source: SOURCE_FALLBACK,
     };
   }
 
