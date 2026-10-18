@@ -20,6 +20,17 @@ export function completedDate(now = new Date()) {
   const day = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now);
   return new Date(new Date(`${day}T00:00:00Z`).getTime() - 86400000).toISOString().slice(0, 10);
 }
+// NSE closes at 15:30 IST; from 18:00 the day's daily candle is final, so the evening
+// run can record today's session instead of waiting a day. Null before then or at weekends.
+export function closedSessionDate(now = new Date()) {
+  const part = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', hourCycle: 'h23', weekday: 'short' }).formatToParts(now).map(p => [p.type, p.value]));
+  if (['Sat', 'Sun'].includes(part.weekday) || Number(part.hour) < 18) return null;
+  return `${part.year}-${part.month}-${part.day}`;
+}
+// The historical endpoint serves completed past days only; today's daily candle comes from the intraday endpoint.
+export function sameDayCandleUrl(key) {
+  return `https://api.upstox.com/v3/historical-candle/intraday/${encodeURIComponent(key)}/days/1`;
+}
 export function candleUrl(key, from, to) {
   return `https://api.upstox.com/v3/historical-candle/${encodeURIComponent(key)}/days/1/${to}/${from}`;
 }
@@ -72,6 +83,7 @@ export async function collectMarketData({ dataDir = DATA_DIR, full = false, symb
   });
   instruments.push(...BENCHMARKS.map(b => ({ ...b, exchange: 'NSE', benchmark: true, sector: b.sector || null })));
   const to = completedDate();
+  const today = closedSessionDate();
   // The provider rejects ranges longer than a decade, so start the day after.
   const from = new Date(Date.parse(`${Number(to.slice(0,4))-years}${to.slice(4)}T00:00:00Z`) + 86400000).toISOString().slice(0,10);
   const manifest = { source:'upstox-v3', startedAt:new Date().toISOString(), requestedFrom:from, requestedTo:to, status:'collecting', instruments:[], unresolved, limitations:['Current constituent selection creates survivorship bias.', 'Corporate-action adjustment and historical revisions are not independently verified.', 'Daily price returns exclude dividend cash flows.', 'Upstox daily prices appear split/bonus adjusted (verified for the RELIANCE October 2024 bonus); other corporate actions are not independently verified.'] };
@@ -87,7 +99,13 @@ export async function collectMarketData({ dataDir = DATA_DIR, full = false, symb
       if (body.status !== 'success') throw new Error('Provider did not confirm successful response');
       const incoming = validateCandles(body.data?.candles, to, start);
       if (!incoming.length) throw new Error('No historical candles returned');
-      const candles = mergeCandles(full ? [] : previous?.candles || [], incoming).filter(row => row[0].slice(0,10) >= from);
+      let sameDay = [];
+      if (today) {
+        // Optional: on a holiday or provider hiccup the previous session simply stays the latest.
+        try { sameDay = validateCandles((await request(sameDayCandleUrl(instrument.instrumentKey), token)).data?.candles?.filter(row => row?.[0]?.slice(0,10) === today) || [], today, today); }
+        catch { sameDay = []; }
+      }
+      const candles = mergeCandles(full ? [] : previous?.candles || [], [...incoming, ...sameDay]).filter(row => row[0].slice(0,10) >= from);
       const fetchedAt = new Date().toISOString();
       const hash = createHash('sha256').update(JSON.stringify(candles)).digest('hex');
       if (previous && previous.hash !== hash) await atomicJson(path.join(dataDir,'snapshots', `${instrument.symbol}-${previous.hash || Date.now()}.json`), previous);

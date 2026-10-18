@@ -36,4 +36,6 @@ export const BENCHMARKS = [
   { symbol: 'NIFTY_INFRA', instrumentKey: 'NSE_INDEX|Nifty Infra', sector: 'INDUSTRIAL' },
   { symbol: 'NIFTY_REALTY', instrumentKey: 'NSE_INDEX|Nifty Realty', sector: 'REALTY' },
   { symbol: 'NIFTY_MEDIA', instrumentKey: 'NSE_INDEX|Nifty Media', sector: 'MEDIA' },
+  // Implied market volatility; an input to the volatility risk model (pulse-risk-v2).
+  { symbol: 'INDIA_VIX', instrumentKey: 'NSE_INDEX|India VIX' },
 ];

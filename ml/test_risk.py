@@ -55,5 +55,23 @@ class RiskLeakageTests(unittest.TestCase):
         self.assertEqual(out["calm"]["precision"], 1.0)
 
 
+class RiskVixTests(unittest.TestCase):
+    def test_implied_volatility_features_are_causal(self):
+        frames, meta = universe(n_days=480)
+        cal = frames["NIFTY_50"].index
+        level = pd.Series(15 * np.exp(np.random.default_rng(3).normal(0, .05, len(cal)).cumsum()), index=cal)
+        frames["INDIA_VIX"] = pd.DataFrame({"open": level, "high": level * 1.02, "low": level * .98, "close": level, "volume": 0.}, index=cal)
+        meta["INDIA_VIX"] = {"benchmark": True}
+        before = risk_panel(frames, meta)
+        self.assertTrue(before.x_vix_vs_normal.notna().any())
+        cut = cal[400]
+        changed = {k: v.copy() for k, v in frames.items()}
+        changed["INDIA_VIX"].loc[changed["INDIA_VIX"].index > cut, ["open", "high", "low", "close"]] *= 3
+        after = risk_panel(changed, meta)
+        cols = ["x_vix_level", "x_vix_vs_normal", "x_vix_chg5"]
+        pd.testing.assert_frame_equal(before.loc[before.date <= cut, cols].reset_index(drop=True),
+                                      after.loc[after.date <= cut, cols].reset_index(drop=True))
+
+
 if __name__ == "__main__":
     unittest.main()

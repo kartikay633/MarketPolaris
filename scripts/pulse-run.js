@@ -22,7 +22,7 @@ try {
   lock=await open(lockFile,'wx');
   await lock.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),mode}));
   await access(python);
-  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','-v']);
+  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','ml.test_disclosure','ml.test_option_features','-v']);
   else if(mode==='forward') {
     await execute(python,['-m','ml.rank','score-forward','--data-dir',DATA_DIR]);
     await execute(python,['-m','ml.risk','score-forward','--data-dir',DATA_DIR]);
@@ -33,6 +33,12 @@ try {
       if(!['ready','ready-with-gaps'].includes(result.status)) throw new Error('Incomplete collection: repair source errors before training or inference');
       try { await execute(process.execPath,['scripts/pulse-news.js','collect','--limit','20']); }
       catch { console.warn('News collection failed; the failure is recorded. Continuing the market-only pipeline.'); }
+      // Results calendar for the volatility model: NSE board-meeting intimations, merged into stored history.
+      try { await execute(python,['-m','ml.news_history','collect','--data-dir',DATA_DIR,'--recent','60','--only','board-meetings']); }
+      catch { console.warn('Board-meeting collection failed; upcoming results dates may be missing from today\'s volatility forecast.'); }
+      // Stock implied volatility for the volatility model: NSE F&O bhavcopies, published after the close.
+      try { await execute(python,['-m','ml.fo_history','collect','--data-dir',DATA_DIR,'--recent','10']); }
+      catch { console.warn('F&O bhavcopy collection failed; implied volatility carries forward up to 3 sessions, then is imputed.'); }
     }
     const report=await readJson(path.join(DATA_DIR,'reports/latest.json'));
     if(mode==='update'&&!report) throw new Error('No trained model. Run npm run research:train first.');

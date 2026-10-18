@@ -67,7 +67,9 @@ def load_candles(data_dir):
     """Validate provider provenance and OHLC consistency without inventing rows."""
     frames, metadata, quality = {}, {}, {}
     digest = hashlib.sha256(VERSION.encode())
-    today = pd.Timestamp(datetime.now(timezone(timedelta(hours=5, minutes=30))).date())
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
+    # Today's candle is final after 18:00 IST (close 15:30), matching closedSessionDate in marketData.js.
+    cutoff = pd.Timestamp(now.date()) + pd.Timedelta(days=1 if now.hour >= 18 else 0)
     for path in sorted((Path(data_dir) / "candles").glob("*.json")):
         raw = path.read_bytes()
         obj = json.loads(raw)
@@ -89,7 +91,7 @@ def load_candles(data_dir):
                  & (frame[["open", "high", "low", "close"]] > 0).all(axis=1)
                  & (frame.volume >= 0) & (frame.high >= frame[["open", "close", "low"]].max(axis=1))
                  & (frame.low <= frame[["open", "close", "high"]].min(axis=1))
-                 & frame.date.notna() & (frame.date < today))
+                 & frame.date.notna() & (frame.date < cutoff))
         invalid_count = int((~valid).sum())
         frame = frame.loc[valid].copy()
         duplicate = frame.duplicated("date", keep=False)
