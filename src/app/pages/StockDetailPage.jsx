@@ -115,10 +115,15 @@ export default function StockDetailPage() {
   const change = quote.change ?? 0;
   const changePercent = quote.changePercent ?? 0;
 
-  // 52-Week Range calculation
-  const low52 = quote.fiftyTwoWeekLow || ltp * 0.75;
-  const high52 = quote.fiftyTwoWeekHigh || ltp * 1.25;
-  const range52Percent = Math.min(Math.max(((ltp - low52) / (high52 - low52 || 1)) * 100, 0), 100);
+  // A field the data source does not provide arrives as null and is shown as unavailable.
+  const has = (v) => v !== null && v !== undefined && Number.isFinite(Number(v));
+  const price = (v) => (has(v) ? `₹${formatIndianNumber(v)}` : '—');
+
+  // 52-Week Range calculation (only when both ends are known)
+  const low52 = quote.fiftyTwoWeekLow;
+  const high52 = quote.fiftyTwoWeekHigh;
+  const has52 = has(low52) && has(high52);
+  const range52Percent = has52 ? Math.min(Math.max(((ltp - low52) / (high52 - low52 || 1)) * 100, 0), 100) : 0;
 
   return (
     <div className="page-container-wide stock-detail-page">
@@ -260,7 +265,7 @@ export default function StockDetailPage() {
               Day Open
             </div>
             <div className="stat-card-value" style={{ fontSize: '18px' }}>
-              ₹{formatIndianNumber(quote.open || ltp)}
+              {price(quote.open)}
             </div>
           </div>
 
@@ -270,7 +275,9 @@ export default function StockDetailPage() {
               Day Range
             </div>
             <div className="num-tabular" style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
-              <span className="text-positive">₹{formatIndianNumber(quote.high || ltp)}</span> / <span className="text-negative">₹{formatIndianNumber(quote.low || ltp)}</span>
+              {has(quote.high) && has(quote.low)
+                ? <><span className="text-positive">{price(quote.high)}</span> / <span className="text-negative">{price(quote.low)}</span></>
+                : '—'}
             </div>
           </div>
 
@@ -280,7 +287,7 @@ export default function StockDetailPage() {
               Previous Close
             </div>
             <div className="stat-card-value" style={{ fontSize: '18px' }}>
-              ₹{formatIndianNumber(quote.previousClose || ltp)}
+              {price(quote.previousClose)}
             </div>
           </div>
 
@@ -290,7 +297,7 @@ export default function StockDetailPage() {
               Trading Volume
             </div>
             <div className="stat-card-value" style={{ fontSize: '18px' }}>
-              {formatIndianNumber(quote.volume || 1200000)}
+              {has(quote.volume) ? formatIndianNumber(quote.volume, 0) : '—'}
             </div>
           </div>
 
@@ -304,41 +311,45 @@ export default function StockDetailPage() {
                 Current: <strong style={{ color: 'var(--text-primary)' }}>₹{formatIndianNumber(ltp)}</strong>
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <span className="num-tabular text-negative" style={{ fontSize: '12px', fontWeight: 600 }}>
-                ₹{formatIndianNumber(low52)}
-              </span>
-              <div className="progress-bar-track" style={{ flex: 1, height: '4px', position: 'relative', overflow: 'visible' }}>
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: 0,
-                    top: 0,
-                    bottom: 0,
-                    width: `${range52Percent}%`,
-                    backgroundColor: 'var(--accent)',
-                    borderRadius: '2px',
-                  }}
-                />
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: `${range52Percent}%`,
-                    top: '-4px',
-                    width: '12px',
-                    height: '12px',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--text-primary)',
-                    border: '2px solid var(--accent)',
-                    transform: 'translateX(-50%)',
-                    boxShadow: 'none',
-                  }}
-                />
+            {has52 ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span className="num-tabular text-negative" style={{ fontSize: '12px', fontWeight: 600 }}>
+                  {price(low52)}
+                </span>
+                <div className="progress-bar-track" style={{ flex: 1, height: '4px', position: 'relative', overflow: 'visible' }}>
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: `${range52Percent}%`,
+                      backgroundColor: 'var(--accent)',
+                      borderRadius: '2px',
+                    }}
+                  />
+                  <div
+                    style={{
+                      position: 'absolute',
+                      left: `${range52Percent}%`,
+                      top: '-4px',
+                      width: '12px',
+                      height: '12px',
+                      borderRadius: '50%',
+                      backgroundColor: 'var(--text-primary)',
+                      border: '2px solid var(--accent)',
+                      transform: 'translateX(-50%)',
+                      boxShadow: 'none',
+                    }}
+                  />
+                </div>
+                <span className="num-tabular text-positive" style={{ fontSize: '12px', fontWeight: 600 }}>
+                  {price(high52)}
+                </span>
               </div>
-              <span className="num-tabular text-positive" style={{ fontSize: '12px', fontWeight: 600 }}>
-                ₹{formatIndianNumber(high52)}
-              </span>
-            </div>
+            ) : (
+              <div style={{ fontSize: '12.5px', color: 'var(--text-muted)' }}>Not available</div>
+            )}
           </div>
 
           {/* Classification */}
@@ -348,13 +359,17 @@ export default function StockDetailPage() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <Building size={15} color="var(--accent)" />
-              <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>
-                {quote.sector || 'Equities'}
+              <span style={{ fontSize: '13px', fontWeight: 600, color: quote.sector ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                {quote.sector || 'Sector not available'}
               </span>
-              <span style={{ color: 'var(--border)' }}>•</span>
-              <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
-                {quote.industry || 'NSE Listed Large Cap'}
-              </span>
+              {quote.industry && (
+                <>
+                  <span style={{ color: 'var(--border)' }}>•</span>
+                  <span style={{ fontSize: '12.5px', color: 'var(--text-secondary)' }}>
+                    {quote.industry}
+                  </span>
+                </>
+              )}
             </div>
           </div>
         </div>

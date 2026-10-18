@@ -8,7 +8,7 @@ import NodeCache from 'node-cache';
 import { MarketDataProvider } from './MarketDataProvider.js';
 import { nseClient } from './nseClient.js';
 import {
-  SOURCE_EOD, SOURCE_UNAVAILABLE, loadUniverse, readCandleSummaries, quoteKeys, snapshotFromQuotes,
+  SOURCE_EOD, SOURCE_UNAVAILABLE, SECTOR_LABELS, loadUniverse, readCandleSummary, readCandleSummaries, quoteKeys, snapshotFromQuotes,
   snapshotFromCandles, movers, breadthOf, sectorsOf, analyzeOptionChain, readNames, saveNames,
 } from './marketSnapshot.js';
 import { getMarketStatus, isMarketOpen } from '../utils/marketHours.js';
@@ -67,6 +67,7 @@ export const SOURCE_LIVE = 'live';
 export const SOURCE_FALLBACK = 'fallback';
 
 const markFallback = (rows) => rows.map((row) => ({ ...row, source: SOURCE_FALLBACK }));
+const positive = (v) => (Number(v) > 0 ? Number(v) : null);
 
 // Saved candle files are named by the research collection; the dashboard knows NIFTY BANK as BANK_NIFTY.
 const SAVED_CANDLE_FILES = { BANK_NIFTY: 'NIFTY_BANK' };
@@ -435,30 +436,40 @@ export class UpstoxProvider extends MarketDataProvider {
           if (quotes.length > 0) {
             const q = quotes[0];
             const ltp = q.last_price || q.close || 0;
-            const prevClose = q.ohlc?.close || ltp;
-            const change = q.net_change ?? (ltp - prevClose);
+            const netChange = Number(q.net_change);
+            const prevClose = Number.isFinite(netChange) ? ltp - netChange : (positive(q.ohlc?.close) ?? ltp);
+            const change = ltp - prevClose;
             const changePercent = prevClose ? Number(((change / prevClose) * 100).toFixed(2)) : 0;
             const marketState = getMarketStatus();
+            // The quote has no 52-week range, average volume or classification. The range and
+            // sector come from the saved daily candles and the research universe; a field with
+            // no source is null, never a circuit limit or a placeholder.
+            const cleanSym = upper.replace(/^(NSE|BSE):/, '');
+            const saved = await readCandleSummary(this.dataDir, cleanSym);
+            const high = positive(q.ohlc?.high);
+            const low = positive(q.ohlc?.low);
+            const sectorCode = this._universe().stocks.find((i) => i.symbol === cleanSym)?.sector || saved?.sector || null;
 
             return {
               symbol: upper,
-              name: q.symbol || upper.replace('NSE:', '').replace('BSE:', ''),
+              name: q.symbol || cleanSym,
               exchange: upper.startsWith('BSE') ? 'BSE' : 'NSE',
               instrumentKey: instKey,
               ltp,
               change: Number(change.toFixed(2)),
               changePercent,
-              open: q.ohlc?.open || 0,
-              high: q.ohlc?.high || 0,
-              low: q.ohlc?.low || 0,
-              close: prevClose,
-              previousClose: prevClose,
-              volume: q.volume || 1000000,
-              averageVolume: q.average_price ? Math.floor(q.volume * 0.8) : 800000,
-              fiftyTwoWeekHigh: q.upper_circuit_limit || (ltp * 1.25),
-              fiftyTwoWeekLow: q.lower_circuit_limit || (ltp * 0.75),
-              sector: 'Equity',
-              industry: 'Equities',
+              open: positive(q.ohlc?.open),
+              high,
+              low,
+              close: Number(prevClose.toFixed(2)),
+              previousClose: Number(prevClose.toFixed(2)),
+              volume: typeof q.volume === 'number' ? q.volume : null,
+              averageVolume: null,
+              // The saved range ends at the last collected session; extend it with today's range.
+              fiftyTwoWeekHigh: saved ? Math.max(saved.fiftyTwoWeekHigh, high ?? ltp) : null,
+              fiftyTwoWeekLow: saved ? Math.min(saved.fiftyTwoWeekLow, low ?? ltp) : null,
+              sector: sectorCode ? SECTOR_LABELS[sectorCode] || sectorCode : null,
+              industry: null,
               marketStatus: marketState.status,
               lastUpdated: new Date().toISOString(),
               source: SOURCE_LIVE,

@@ -86,7 +86,9 @@ export async function readCandleSummary(dataDir, symbol) {
     const { mtimeMs } = await stat(file);
     const hit = summaryCache.get(file);
     if (hit && hit.mtimeMs === mtimeMs) return hit.summary;
-    const summary = summarizeCandles(JSON.parse(await readFile(file, 'utf8')).candles);
+    const doc = JSON.parse(await readFile(file, 'utf8'));
+    const summary = summarizeCandles(doc.candles);
+    if (summary) summary.sector = doc.sector || null;
     summaryCache.set(file, { mtimeMs, summary });
     return summary;
   } catch {

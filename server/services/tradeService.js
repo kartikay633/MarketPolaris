@@ -148,7 +148,7 @@ export class TradeService {
             dayPL,
             change: quote.change || 0,
             changePercent: quote.changePercent || 0,
-            sector: quote.sector || 'Equities',
+            sector: quote.sector ?? null,
           };
         } catch (err) {
           const investedValue = Number((pos.quantity * pos.avgPrice).toFixed(2));

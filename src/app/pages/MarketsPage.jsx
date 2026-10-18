@@ -385,7 +385,8 @@ export default function MarketsPage() {
                       const daySpan = Math.max(0.01, s.high - s.low);
                       const dayProgress = Math.min(100, Math.max(0, ((s.ltp - s.low) / daySpan) * 100));
 
-                      // 52W Range calculation
+                      // 52W Range calculation (null when no saved candles cover the stock)
+                      const has52 = s.fiftyTwoWeekHigh != null && s.fiftyTwoWeekLow != null;
                       const yrSpan = Math.max(0.01, s.fiftyTwoWeekHigh - s.fiftyTwoWeekLow);
                       const yrProgress = Math.min(100, Math.max(0, ((s.ltp - s.fiftyTwoWeekLow) / yrSpan) * 100));
 
@@ -490,25 +491,29 @@ export default function MarketsPage() {
 
                           {/* 52W Range */}
                           <td style={{ padding: '12px', textAlign: 'right', minWidth: '110px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
-                              <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', position: 'relative' }}>
-                                <div 
-                                  style={{ 
-                                    position: 'absolute', 
-                                    left: `${yrProgress}%`, 
-                                    top: '-2px', 
-                                    width: '8px', 
-                                    height: '8px', 
-                                    borderRadius: '50%', 
-                                    backgroundColor: 'var(--accent-bright)',
-                                    transform: 'translateX(-50%)',
-                                  }} 
-                                />
+                            {has52 ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '3px', alignItems: 'flex-end' }}>
+                                <div style={{ width: '80px', height: '4px', backgroundColor: 'var(--border)', borderRadius: '2px', position: 'relative' }}>
+                                  <div 
+                                    style={{ 
+                                      position: 'absolute', 
+                                      left: `${yrProgress}%`, 
+                                      top: '-2px', 
+                                      width: '8px', 
+                                      height: '8px', 
+                                      borderRadius: '50%', 
+                                      backgroundColor: 'var(--accent-bright)',
+                                      transform: 'translateX(-50%)',
+                                    }} 
+                                  />
+                                </div>
+                                <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+                                  {formatIndianNumber(Math.round(s.fiftyTwoWeekLow))} - {formatIndianNumber(Math.round(s.fiftyTwoWeekHigh))}
+                                </span>
                               </div>
-                              <span style={{ fontSize: '10px', color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                                {formatIndianNumber(Math.round(s.fiftyTwoWeekLow))} - {formatIndianNumber(Math.round(s.fiftyTwoWeekHigh))}
-                              </span>
-                            </div>
+                            ) : (
+                              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>—</span>
+                            )}
                           </td>
 
                           {/* Volume */}
