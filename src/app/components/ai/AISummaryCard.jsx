@@ -1,4 +1,4 @@
-// ROADMAP: Section 5, 10 & Design Refinement — Institutional Market Intelligence Card with Post-Market Feed
+// ROADMAP: Section 5, 10 & Design Refinement — Institutional Market Intelligence Card
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAIMarketSummary } from '../../hooks/useAI';
@@ -37,14 +37,18 @@ export default function AISummaryCard() {
 
   const isAfterMarket = summary?.isAfterMarket ?? true;
   const isBullish = summary?.marketStance === 'Bullish Momentum';
-  const postMarketFeed = summary?.postMarketFeed || [];
-  const pivots = summary?.nextSessionPivots || {
-    niftySupport: '25,280 / 25,150',
-    niftyResistance: '25,450 / 25,520',
-    maxPain: '23,300',
-    pcr: '1.15 (Bullish Bias)',
-    vix: '12.85',
-  };
+  // Everything below comes from the server's data-built brief; a missing figure is left out.
+  const sessionFeed = summary?.sessionFeed || [];
+  const pivots = summary?.levels?.pivots || null;
+  const options = summary?.levels?.options || null;
+  const levelTiles = [
+    pivots && { label: 'NIFTY 50 Support', value: pivots.support, color: 'var(--positive)' },
+    pivots && { label: 'NIFTY 50 Resistance', value: pivots.resistance, color: 'var(--negative)' },
+    options?.maxPain && { label: 'Options Max Pain', value: `${options.maxPain} Strike`, color: 'var(--accent-bright)' },
+    options?.pcr && { label: 'Put-Call Ratio (PCR)', value: options.pcr, color: 'var(--text-primary)' },
+    options?.putWall && { label: 'Highest Put OI', value: `${options.putWall} Strike`, color: 'var(--positive)' },
+    options?.callWall && { label: 'Highest Call OI', value: `${options.callWall} Strike`, color: 'var(--negative)' },
+  ].filter(Boolean);
 
   return (
     <div 
@@ -139,7 +143,7 @@ export default function AISummaryCard() {
           style={{ fontSize: '11px', padding: '4px 10px' }}
         >
           <Clock size={11} />
-          <span>Post-Market Feed (4)</span>
+          <span>Session Data ({sessionFeed.length})</span>
         </button>
         <button
           type="button"
@@ -148,7 +152,7 @@ export default function AISummaryCard() {
           style={{ fontSize: '11px', padding: '4px 10px' }}
         >
           <Compass size={11} />
-          <span>Next Day Pivots</span>
+          <span>Key Levels</span>
         </button>
       </div>
 
@@ -177,16 +181,16 @@ export default function AISummaryCard() {
         </div>
       )}
 
-      {/* TAB 2: Chronological Post-Market Feed (What happened after 3:30 PM) */}
+      {/* TAB 2: The exchange data behind the brief, each with the time it was published */}
       {activeTab === 'postmarket' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative', zIndex: 1 }}>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
             <Calendar size={12} />
-            <span>Chronological feed of disclosures occurring after the 3:30 PM closing bell:</span>
+            <span>{sessionFeed.length ? 'Exchange data behind this brief, with the time each figure is as of:' : 'Session data will appear once exchange figures are available.'}</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {postMarketFeed.map((event, idx) => (
+            {sessionFeed.map((event, idx) => (
               <div 
                 key={idx}
                 style={{
@@ -223,49 +227,37 @@ export default function AISummaryCard() {
         </div>
       )}
 
-      {/* TAB 3: Next Day Pivots & Gameplan */}
+      {/* TAB 3: Levels computed from the session's index and option-chain data */}
       {activeTab === 'pivots' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-            Quantitative pivot levels and derivative pinning boundaries for the next market open:
+            {levelTiles.length === 0
+              ? "Levels appear once the session's index and option-chain data are available."
+              : [
+                pivots && `Classic floor pivots from the ${pivots.basis} (pivot ${pivots.pivot})`,
+                options && `NIFTY option chain${options.expiry ? ` for the ${options.expiry} expiry` : ''}`,
+              ].filter(Boolean).join('; ') + '.'}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
-            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>NIFTY 50 Support</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                {pivots.niftySupport}
-              </div>
+          {levelTiles.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px' }}>
+              {levelTiles.map((tile) => (
+                <div key={tile.label} style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
+                  <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>{tile.label}</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: tile.color, fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
+                    {tile.value}
+                  </div>
+                </div>
+              ))}
             </div>
-
-            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>NIFTY 50 Resistance</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--negative)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                {pivots.niftyResistance}
-              </div>
-            </div>
-
-            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Options Max Pain</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--accent-bright)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                {pivots.maxPain} Strike
-              </div>
-            </div>
-
-            <div style={{ padding: '8px', backgroundColor: 'var(--card-hover)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-xs)' }}>
-              <div style={{ fontSize: '10px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Put-Call Ratio (PCR)</div>
-              <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)', marginTop: '2px' }}>
-                {pivots.pcr}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Footer CTA to /ai */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '8px', borderTop: '1px solid var(--border-subtle)', position: 'relative', zIndex: 1 }}>
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <ShieldCheck size={12} color="var(--positive)" /> Grounded in verified exchange settlement
+          <ShieldCheck size={12} color="var(--positive)" /> Built from NSE &amp; Upstox market data
         </span>
         <Link
           to="/ai"

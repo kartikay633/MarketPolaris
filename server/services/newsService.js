@@ -20,13 +20,12 @@ export class NewsService {
     const cacheKey = `news:market:${category}:${limit}`;
 
     const cached = cache.get(cacheKey);
-    // Only return cached if it contains a healthy number of articles (preventing stale 3-article cache)
-    if (cached && Array.isArray(cached) && cached.length >= Math.min(limit, 10)) {
-      return cached;
-    }
+    if (cached) return cached;
 
+    // The feed serves only real articles, so a short list is normal; an empty one (feed down)
+    // is kept briefly so the next request retries soon without hammering the API.
     const articles = await this.provider.getMarketNews({ category, limit });
-    cache.set(cacheKey, articles, 120); // 2 minutes cache
+    cache.set(cacheKey, articles, articles.length ? 120 : 30); // 2 minutes cache
     return articles;
   }
 

@@ -117,7 +117,7 @@ export default function DashboardPage() {
   const { data: losers = [], isLoading: isLosersLoading } = useLosers(15);
   const { data: active = [], isLoading: isActiveLoading } = useActive(15);
   const { data: universe } = useMarketStocks();
-  const { data: marketNews = [] } = useMarketNews('all', 6);
+  const { data: marketNews = [], isLoading: isNewsLoading } = useMarketNews('all', 6);
 
   // Live Simulated Capital Queries & Mutations
   const { data: portfolioData, refetch: refetchPortfolio } = usePortfolio();
@@ -572,7 +572,7 @@ export default function DashboardPage() {
                   ))}
                 </ol>
               ) : (
-                <div className="fd-wire-list fd-empty">Loading financial news feed…</div>
+                <div className="fd-wire-list fd-empty">{isNewsLoading ? 'Loading financial news feed…' : 'No new market headlines right now.'}</div>
               )}
             </div>
             <aside className="fd-brief" aria-label="Pulse AI market brief">

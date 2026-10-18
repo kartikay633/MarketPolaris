@@ -1,6 +1,7 @@
-// ROADMAP: Section 8 — Upstox Provider Implementation (Live & Fallback Mock)
+// ROADMAP: Section 8 — Upstox Provider Implementation
 import axios from 'axios';
 import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 import NodeCache from 'node-cache';
@@ -66,6 +67,38 @@ export const SOURCE_LIVE = 'live';
 export const SOURCE_FALLBACK = 'fallback';
 
 const markFallback = (rows) => rows.map((row) => ({ ...row, source: SOURCE_FALLBACK }));
+
+// Saved candle files are named by the research collection; the dashboard knows NIFTY BANK as BANK_NIFTY.
+const SAVED_CANDLE_FILES = { BANK_NIFTY: 'NIFTY_BANK' };
+
+// [timestamp, open, high, low, close, volume, oi] → chart candle (epoch seconds).
+const toCandle = (c) => ({
+  time: Math.floor(new Date(c[0]).getTime() / 1000),
+  open: Number(c[1]),
+  high: Number(c[2]),
+  low: Number(c[3]),
+  close: Number(c[4]),
+  volume: Number(c[5] || 0),
+});
+
+// Rolls chronological daily candles up into Monday-start weeks (IST dates).
+function toWeeks(daily) {
+  const weeks = [];
+  for (const c of daily) {
+    const day = new Date((c.time + 19800) * 1000);
+    const monday = Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate() - ((day.getUTCDay() + 6) % 7));
+    const last = weeks[weeks.length - 1];
+    if (last && last.week === monday) {
+      last.high = Math.max(last.high, c.high);
+      last.low = Math.min(last.low, c.low);
+      last.close = c.close;
+      last.volume += c.volume;
+    } else {
+      weeks.push({ week: monday, ...c });
+    }
+  }
+  return weeks.map(({ week, ...c }) => c);
+}
 
 // Build lookup map supporting 'RELIANCE', 'NSE:RELIANCE', 'BSE:RELIANCE'
 const SYMBOL_TO_INSTRUMENT_KEY = {};
@@ -557,17 +590,14 @@ export class UpstoxProvider extends MarketDataProvider {
     // Determine interval configuration
     let upstoxInterval = 'day';
     let daysBack = 90;
-    let stepMinutes = 0;
 
     const normInterval = (interval || '').toUpperCase();
     if (normInterval === '1D' || interval === '1minute') {
       upstoxInterval = '1minute';
       daysBack = 2;
-      stepMinutes = 5;
     } else if (normInterval === '1W' || interval === '30minute') {
       upstoxInterval = '30minute';
       daysBack = 7;
-      stepMinutes = 30;
     } else if (normInterval === '1M') {
       upstoxInterval = 'day';
       daysBack = 30;
@@ -582,14 +612,14 @@ export class UpstoxProvider extends MarketDataProvider {
       daysBack = 1825;
     }
 
+    const today = new Date().toISOString().split('T')[0];
+    const past = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const to = toDate || today;
+    const from = fromDate || past;
+
     // Live Upstox candle fetch
     if (this.isLive && instKey) {
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const past = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        const to = toDate || today;
-        const from = fromDate || past;
-
         const res = await axios.get(
           `${this.baseUrl}/historical-candle/${encodeURIComponent(instKey)}/${upstoxInterval}/${to}/${from}`,
           {
@@ -605,55 +635,36 @@ export class UpstoxProvider extends MarketDataProvider {
           // Upstox candle array: [timestamp, open, high, low, close, volume, oi]
           // Upstox returns candles from newest to oldest; reverse to chronological for Lightweight Charts
           const sorted = [...res.data.data.candles].reverse();
-          return sorted.map((c) => ({
-            time: Math.floor(new Date(c[0]).getTime() / 1000),
-            open: Number(c[1]),
-            high: Number(c[2]),
-            low: Number(c[3]),
-            close: Number(c[4]),
-            volume: Number(c[5] || 0),
-          }));
+          return sorted.map((c) => ({ ...toCandle(c), source: SOURCE_LIVE }));
         }
       } catch (err) {
-        logger.warn({ err: err.message }, `Live Upstox candle fetch failed for ${symbol} (${upstoxInterval}), using high-fidelity generator`);
+        logger.warn({ err: err.message }, `Live Upstox candle fetch failed for ${symbol} (${upstoxInterval})`);
       }
     }
 
-    // High-fidelity fallback candle generator
-    const candles = [];
-    const count = normInterval === '1D' ? 75 : normInterval === '1W' ? 50 : normInterval === '1M' ? 30 : normInterval === '5Y' ? 260 : 90;
-    let basePrice = 2500;
+    // No feed: daily and weekly views read the saved daily candles; intraday views have no
+    // saved substitute, so they return [] and the UI shows its day-range rail instead.
+    if (upstoxInterval !== 'day' && upstoxInterval !== 'week') return [];
+    return this._savedCandles(symbol, { from, to, weekly: upstoxInterval === 'week' });
+  }
 
-    const now = new Date();
-    for (let i = count; i >= 0; i--) {
-      const d = new Date(now);
-      if (stepMinutes > 0) {
-        d.setMinutes(d.getMinutes() - (i * stepMinutes));
-      } else if (normInterval === '5Y') {
-        d.setDate(d.getDate() - (i * 7));
-      } else {
-        d.setDate(d.getDate() - i);
-      }
-
-      const open = basePrice + (Math.random() - 0.48) * 18;
-      const close = open + (Math.random() - 0.48) * 32;
-      const high = Math.max(open, close) + Math.random() * 12;
-      const low = Math.min(open, close) - Math.random() * 12;
-      const volume = Math.floor(400000 + Math.random() * 1800000);
-
-      candles.push({
-        time: Math.floor(d.getTime() / 1000),
-        open: Number(open.toFixed(2)),
-        high: Number(high.toFixed(2)),
-        low: Number(low.toFixed(2)),
-        close: Number(close.toFixed(2)),
-        volume,
-      });
-
-      basePrice = close;
+  // Saved daily candles (data/pulse/candles/<SYMBOL>.json) within [from, to], marked
+  // 'end-of-day', optionally rolled up to weeks. A symbol with no saved file returns [].
+  async _savedCandles(symbol, { from, to, weekly }) {
+    const bare = symbol.toUpperCase().replace(/^(NSE|BSE):/, '');
+    const file = SAVED_CANDLE_FILES[bare] || bare;
+    if (!/^[A-Z0-9&_-]+$/.test(file)) return [];
+    let rows;
+    try {
+      rows = JSON.parse(await readFile(path.join(this.dataDir, 'candles', `${file}.json`), 'utf8')).candles;
+    } catch {
+      return [];
     }
-
-    return candles;
+    const daily = (Array.isArray(rows) ? rows : [])
+      .filter((c) => Array.isArray(c) && Number(c[4]) > 0)
+      .filter((c) => { const d = String(c[0]).slice(0, 10); return d >= from && d <= to; })
+      .map(toCandle);
+    return (weekly ? toWeeks(daily) : daily).map((c) => ({ ...c, source: SOURCE_EOD }));
   }
 
   async searchInstruments(query) {
