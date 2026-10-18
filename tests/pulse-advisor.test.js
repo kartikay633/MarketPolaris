@@ -84,3 +84,11 @@ test('plans are recorded once and scored against NIFTY after the horizon', async
   await recordPlan(long, dataDir, 'model');
   assert.equal((await scorePlans(dataDir)).open, 1);
 });
+
+test('a freshly placed plan inside a larger paper account needs no action', async t => {
+  const dataDir = await fixture(t);
+  const plan = await buildPlan({ budget: 200000, horizon: '1m', risk: 'balanced' }, { dataDir });
+  const review = await reviewPortfolio({ budget: 200000, horizon: '1m', risk: 'balanced', cash: 800000,
+    positions: plan.holdings.map(h => ({ symbol: `NSE:${h.symbol}`, quantity: h.quantity, avgPrice: h.price, currentPrice: h.price })) }, { dataDir });
+  assert.deepEqual([...new Set(review.actions.map(a => a.action))], ['hold']);
+});

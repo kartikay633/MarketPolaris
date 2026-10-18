@@ -26,6 +26,10 @@ export class TradeService {
     // 1. Fetch live execution price (server-side determined)
     const quote = await marketDataService.getQuote(cleanSym);
     const ltp = quote.ltp;
+    // Paper orders fill only at a price served by the live feed, never a built-in fallback.
+    if (quote.source !== 'live') {
+      throw new Error(`Live price for ${cleanSym} is unavailable right now, so the paper order was not placed. Try again shortly.`);
+    }
     if (!ltp || isNaN(ltp) || ltp <= 0) {
       throw new Error(`Unable to fetch valid market price for ${cleanSym}`);
     }
@@ -117,7 +121,9 @@ export class TradeService {
       rawPositions.map(async (pos) => {
         try {
           const quote = await marketDataService.getQuote(pos.symbol);
-          const currentPrice = quote.ltp || pos.avgPrice;
+          // Value holdings only at live prices; otherwise at cost, flagged as not live.
+          const priceLive = quote.source === 'live' && quote.ltp > 0;
+          const currentPrice = priceLive ? quote.ltp : pos.avgPrice;
           const investedValue = Number((pos.quantity * pos.avgPrice).toFixed(2));
           const currentValue = Number((pos.quantity * currentPrice).toFixed(2));
           const unrealizedPL = Number((currentValue - investedValue).toFixed(2));
@@ -134,6 +140,7 @@ export class TradeService {
             quantity: pos.quantity,
             avgPrice: pos.avgPrice,
             currentPrice,
+            priceLive,
             investedValue,
             currentValue,
             unrealizedPL,

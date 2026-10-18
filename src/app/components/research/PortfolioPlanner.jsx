@@ -42,7 +42,7 @@ export default function PortfolioPlanner({ onDiscuss }) {
   const positions = portfolio.data?.positions || [];
   const cash = portfolio.data?.cashBalance ?? portfolio.data?.account?.cashBalance;
   const reviewInput = useMemo(() => ({ ...profile, cash: Number.isFinite(cash) ? cash : undefined,
-    positions: positions.filter(p => p.quantity > 0).map(p => ({ symbol: p.symbol, quantity: p.quantity, avgPrice: p.avgPrice, ...(p.currentPrice > 0 ? { currentPrice: p.currentPrice } : {}) })) }),
+    positions: positions.filter(p => p.quantity > 0).map(p => ({ symbol: p.symbol, quantity: p.quantity, avgPrice: p.avgPrice, ...(p.priceLive && p.currentPrice > 0 ? { currentPrice: p.currentPrice } : {}) })) }),
   [profile, positions, cash]);
   const review = useQuery({ queryKey: ['pulse-checkup', reviewInput], enabled: reviewInput.positions.length > 0,
     queryFn: async () => (await api.post('/research/advisor/review', reviewInput, { timeout: 30000 })).data, staleTime: 60000 });

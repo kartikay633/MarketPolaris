@@ -171,7 +171,16 @@ export async function reviewPortfolio(body, { dataDir = DATA_DIR } = {}) {
   const bySymbol = Object.fromEntries(signals.rank.filter(p => p.horizon === horizon.signal).map(p => [p.symbol, p]));
   const closes = await latestCloses(dataDir, signals.asOf, signals.symbols);
   const value = p => p.quantity * (p.currentPrice || closes[clean(p.symbol)]?.close || p.avgPrice);
-  const total = input.positions.reduce((a, p) => a + value(p), 0) + (input.cash || 0);
+  // Weights are measured against the planned amount (or the holdings, if they have grown past it),
+  // not the whole paper account, so a fresh plan inside a larger account is not reported as under-weight.
+  const heldValue = input.positions.reduce((a, p) => a + value(p), 0);
+  const total = Math.max(input.budget, heldValue);
+  const spare = Math.max(0, Math.min(input.cash ?? total - heldValue, total - heldValue));
+  // Each holding's own risk-based target weight, computed exactly as the plan sizes positions.
+  const covered = input.positions.map(x => clean(x.symbol)).filter(sym => bySymbol[sym] && signals.riskBy[sym]);
+  const inverse = Object.fromEntries(covered.map(sym => [sym, 1 / forecastVol(signals.riskBy[sym])]));
+  const inverseTotal = Object.values(inverse).reduce((a, b) => a + b, 0);
+  const targetOf = sym => Math.min(profile.maxWeight, (inverse[sym] / inverseTotal) * (1 - profile.cash));
   const actions = input.positions.map(position => {
     const symbol = clean(position.symbol), p = bySymbol[symbol], r = signals.riskBy[symbol];
     const price = position.currentPrice || closes[symbol]?.close || position.avgPrice;
@@ -192,9 +201,9 @@ export async function reviewPortfolio(body, { dataDir = DATA_DIR } = {}) {
       const target = r.riskTier === 'elevated' ? profile.maxWeight * .5 : profile.maxWeight;
       quantity = Math.max(1, Math.floor((weight - target) * total / price));
       why.push(weight > profile.maxWeight * 1.4 ? `Position is ${Math.round(weight * 100)}% of your portfolio; the plan limit is ${Math.round(profile.maxWeight * 100)}%` : 'Volatility expected to be larger than usual; reduce exposure');
-    } else if (p.tier === 'top quintile' && r.riskTier !== 'elevated' && weight < profile.maxWeight * .6 && (input.cash || 0) > price) {
+    } else if (p.tier === 'top quintile' && r.riskTier !== 'elevated' && weight < targetOf(symbol) * .7 && spare > price) {
       action = 'add';
-      quantity = Math.max(1, Math.floor(Math.min(profile.maxWeight * .8 - weight, (input.cash || 0) / total) * total / price));
+      quantity = Math.max(1, Math.floor(Math.min(targetOf(symbol) - weight, spare / total) * total / price));
       why.push('Still ranked in the top fifth of covered stocks', 'Position is below its planned size');
     } else {
       why.push(p.tier === 'top quintile' ? 'Outlook remains strong' : p.tier === 'bottom quintile' ? 'Outlook has weakened; watch closely' : 'Outlook neutral; no change needed');

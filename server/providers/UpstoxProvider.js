@@ -1,5 +1,7 @@
 // ROADMAP: Section 8 — Upstox Provider Implementation (Live & Fallback Mock)
 import axios from 'axios';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { MarketDataProvider } from './MarketDataProvider.js';
 import { getMarketStatus } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
@@ -60,6 +62,16 @@ for (const [key, val] of Object.entries(RAW_MAPPINGS)) {
   SYMBOL_TO_INSTRUMENT_KEY[`NSE:${key}`] = val;
   SYMBOL_TO_INSTRUMENT_KEY[`BSE:${key}`] = val;
 }
+// Every stock the research pipeline covers: instrument keys resolved by the nightly
+// collection from Upstox's official NSE instrument list (data/pulse/collection.json).
+try {
+  const manifest = JSON.parse(readFileSync(path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse', 'collection.json'), 'utf8'));
+  for (const { symbol, instrumentKey } of manifest.instruments || []) {
+    if (!/^NSE_EQ\|/.test(instrumentKey || '') || SYMBOL_TO_INSTRUMENT_KEY[symbol]) continue;
+    SYMBOL_TO_INSTRUMENT_KEY[symbol] = instrumentKey;
+    SYMBOL_TO_INSTRUMENT_KEY[`NSE:${symbol}`] = instrumentKey;
+  }
+} catch { /* no research collection yet: only the built-in symbols resolve */ }
 
 export class UpstoxProvider extends MarketDataProvider {
   constructor() {
