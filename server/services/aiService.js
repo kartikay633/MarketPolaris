@@ -1,8 +1,11 @@
 // ROADMAP: Section 6 & 10 — AI Service (Google Gemini 1.5 Flash + Data-Grounded Synthesis)
 import axios from 'axios';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import NodeCache from 'node-cache';
 import { marketDataService } from './marketDataService.js';
 import { newsService } from './newsService.js';
+import { readNames } from '../providers/marketSnapshot.js';
 import { isMarketOpen, getMarketStatus } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
 
@@ -226,10 +229,256 @@ export function numbersGrounded(text, context) {
   return numbersIn(text).every((n) => known.has(n));
 }
 
+// ── Saved daily history ─────────────────────────────────────────────────────
+// Stock insights and the historical study read only the saved daily candles in
+// data/pulse/candles/<SYMBOL>.json. Every figure they show is computed from those rows
+// and dated by the last saved session; a symbol with no saved file shows no figures.
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const YEAR_MS = 365.25 * DAY_MS;
+const SAVED_FILE_ALIASES = { NIFTY: 'NIFTY_50', NIFTY50: 'NIFTY_50', BANK_NIFTY: 'NIFTY_BANK', BANKNIFTY: 'NIFTY_BANK' };
+// Index symbols the chat may be handed; questions about them get the market brief.
+const INDEX_SYMBOL = /^((NSE|BSE):)?(NIFTY|SENSEX|BANKEX|BANKNIFTY|BANK_NIFTY|INDIA_VIX)/i;
+const REAL_QUOTE_SOURCES = new Set(['live', 'end-of-day']);
+const NEWS_MAX_AGE_MS = 7 * DAY_MS;
+const round2 = (n) => Math.round(n * 100) / 100;
+const rupees = (n) => `₹${fmt(n)}`;
+// '2026-10-16' → '16 Oct 2026': multi-year statistics need the year.
+const dayOf = (date) => {
+  const t = Date.parse(`${date}T00:00:00+05:30`);
+  return Number.isFinite(t) ? new Date(t).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : date;
+};
+const pctFrom = (value, base) => ((value - base) / base) * 100;
+const yearsBefore = (date, years) => new Date(Date.parse(`${date}T00:00:00Z`) - years * YEAR_MS).toISOString().slice(0, 10);
+
+export async function readSavedCandles(dataDir, symbol) {
+  const name = bare(symbol).toUpperCase();
+  const file = SAVED_FILE_ALIASES[name] || name;
+  if (!/^[A-Z0-9&_-]+$/.test(file)) return null;
+  try {
+    const doc = JSON.parse(await readFile(path.join(dataDir, 'candles', `${file}.json`), 'utf8'));
+    const rows = (Array.isArray(doc.candles) ? doc.candles : [])
+      .filter((c) => Array.isArray(c) && [2, 3, 4].every((i) => Number(c[i]) > 0))
+      .map((c) => ({ date: String(c[0]).slice(0, 10), open: Number(c[1]), high: Number(c[2]), low: Number(c[3]), close: Number(c[4]), volume: Number(c[5]) || 0 }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    return rows.length >= 2 ? { file, sector: doc.sector || null, benchmark: Boolean(doc.benchmark), rows } : null;
+  } catch {
+    return null;
+  }
+}
+
+const mean = (xs) => xs.reduce((s, x) => s + x, 0) / xs.length;
+const stdev = (xs) => { const m = mean(xs); return Math.sqrt(xs.reduce((s, x) => s + (x - m) ** 2, 0) / (xs.length - 1)); };
+const sma = (rows, n) => (rows.length >= n ? mean(rows.slice(-n).map((r) => r.close)) : null);
+const dailyReturns = (rows) => rows.slice(1).map((r, i) => ({ date: r.date, ret: r.close / rows[i].close - 1 }));
+
+// Statistics of saved daily candles over the trailing `years` (or all saved history when it
+// is shorter). A statistic is null when the rows cannot support it; nothing is filled in.
+export function candleStudy(rows, { benchmark = null, years = 5 } = {}) {
+  if (!Array.isArray(rows) || rows.length < 2) return null;
+  const last = rows[rows.length - 1];
+  const cutoff = yearsBefore(last.date, years);
+  const span = rows.filter((r) => r.date >= cutoff);
+  const first = span[0];
+  const coveredYears = (Date.parse(last.date) - Date.parse(first.date)) / YEAR_MS;
+  const returns = dailyReturns(span);
+
+  const yearRows = rows.filter((r) => r.date > yearsBefore(last.date, 1));
+  const hi = yearRows.reduce((a, r) => (r.high > a.high ? r : a), yearRows[0]);
+  const lo = yearRows.reduce((a, r) => (r.low < a.low ? r : a), yearRows[0]);
+
+  let peak = span[0];
+  let drawdown = { pct: 0, peakDate: span[0].date, troughDate: span[0].date };
+  for (const r of span) {
+    if (r.close > peak.close) peak = r;
+    const dd = pctFrom(r.close, peak.close);
+    if (dd < drawdown.pct) drawdown = { pct: dd, peakDate: peak.date, troughDate: r.date };
+  }
+
+  // Historical 1-day 95% VaR: the 5th-percentile daily return of the past year.
+  const yearReturns = dailyReturns(yearRows).map((r) => r.ret).sort((a, b) => a - b);
+  const var95 = yearReturns.length >= 100 ? yearReturns[Math.floor(yearReturns.length * 0.05)] * 100 : null;
+
+  // Beta and correlation against the benchmark's returns on the same sessions.
+  let beta = null;
+  let correlation = null;
+  if (benchmark?.length) {
+    const closeOn = new Map(benchmark.map((r) => [r.date, r.close]));
+    const paired = span.filter((r) => closeOn.has(r.date));
+    const pairs = paired.slice(1).map((r, i) => [r.close / paired[i].close - 1, closeOn.get(r.date) / closeOn.get(paired[i].date) - 1]);
+    if (pairs.length >= 60) {
+      const xs = pairs.map((p) => p[1]);
+      const ys = pairs.map((p) => p[0]);
+      const mx = mean(xs);
+      const my = mean(ys);
+      const cov = pairs.reduce((s, [y, x]) => s + (x - mx) * (y - my), 0) / (pairs.length - 1);
+      beta = cov / stdev(xs) ** 2;
+      correlation = cov / (stdev(xs) * stdev(ys));
+    }
+  }
+
+  // Price band (of 20 across the 52-week range) where the most shares traded in the past year.
+  let volumeBand = null;
+  if (yearRows.every((r) => r.volume > 0) && hi.high > lo.low) {
+    const bands = 20;
+    const width = (hi.high - lo.low) / bands;
+    const traded = new Array(bands).fill(0);
+    for (const r of yearRows) {
+      const typical = (r.high + r.low + r.close) / 3;
+      traded[Math.min(bands - 1, Math.floor((typical - lo.low) / width))] += r.volume;
+    }
+    const top = traded.indexOf(Math.max(...traded));
+    volumeBand = { low: round2(lo.low + top * width), high: round2(lo.low + (top + 1) * width) };
+  }
+
+  const sma50 = sma(rows, 50);
+  const sma200 = sma(rows, 200);
+  return {
+    asOf: last.date,
+    from: first.date,
+    sessions: span.length,
+    years: round2(coveredYears),
+    firstClose: first.close,
+    lastClose: last.close,
+    previousClose: rows[rows.length - 2].close,
+    cagrPct: coveredYears >= 1 ? round2(((last.close / first.close) ** (1 / coveredYears) - 1) * 100) : null,
+    totalReturnPct: round2(pctFrom(last.close, first.close)),
+    annualVolatilityPct: returns.length >= 20 ? round2(stdev(returns.map((r) => r.ret)) * Math.sqrt(252) * 100) : null,
+    maxDrawdown: { pct: round2(drawdown.pct), peakDate: drawdown.peakDate, troughDate: drawdown.troughDate },
+    sma50: sma50 === null ? null : round2(sma50),
+    sma200: sma200 === null ? null : round2(sma200),
+    vsSma50Pct: sma50 === null ? null : round2(pctFrom(last.close, sma50)),
+    vsSma200Pct: sma200 === null ? null : round2(pctFrom(last.close, sma200)),
+    fiftyTwoWeek: { high: hi.high, highDate: hi.date, low: lo.low, lowDate: lo.date },
+    var95Pct: var95 === null ? null : round2(var95),
+    betaVsNifty: beta === null ? null : round2(beta),
+    correlationVsNifty: correlation === null ? null : round2(correlation),
+    volumeBand,
+  };
+}
+
+const aboveBelow = (pct) => `${fmt(Math.abs(pct))}% ${pct >= 0 ? 'above' : 'below'}`;
+
+// Stock insight from a real quote, the saved daily history and dated news headlines.
+// No real quote (missing, or the provider's built-in 'fallback') → a neutral insight with no figures.
+export function stockInsightFrom({ symbol, quote = null, history = null, news = [] }) {
+  const sym = bare(symbol).toUpperCase();
+  const base = { symbol: sym, timestamp: new Date().toISOString() };
+  if (!quote || !REAL_QUOTE_SOURCES.has(quote.source) || !(num(quote.ltp) > 0)) {
+    return {
+      ...base,
+      available: false,
+      sentiment: 'neutral',
+      summary: `Market data for ${sym} is unavailable right now, so Pulse AI has no insight to show. Please check again shortly.`,
+      keyFactors: [],
+      technicalNote: null,
+      catalyst: null,
+      sources: { quote: 'unavailable' },
+    };
+  }
+
+  const ltp = Number(quote.ltp);
+  const change = num(quote.changePercent);
+  const verb = quote.source === 'live' ? 'last traded at' : 'closed at';
+  let summary = `${sym} ${verb} ${rupees(ltp)}${change !== null ? ` (${signedPct(change)} on the day)` : ''}.`;
+  if (num(quote.low) > 0 && num(quote.high) >= num(quote.low)) summary += ` Day range ${rupees(quote.low)} – ${rupees(quote.high)}.`;
+
+  const keyFactors = [];
+  let technicalNote = null;
+  if (history) {
+    const day = dayOf(history.asOf);
+    const { high, low } = history.fiftyTwoWeek;
+    keyFactors.push(`52-week range ${rupees(low)} – ${rupees(high)} (daily closes to ${day})`);
+    keyFactors.push(`${aboveBelow(pctFrom(ltp, high))} the 52-week high of ${rupees(high)}`);
+    if (history.annualVolatilityPct !== null) keyFactors.push(`Annualised volatility ${fmt(history.annualVolatilityPct)}% over the past year`);
+    const averages = [];
+    if (history.sma50 !== null) averages.push(`${aboveBelow(history.vsSma50Pct)} its 50-day average of ${rupees(history.sma50)}`);
+    if (history.sma200 !== null) averages.push(`${aboveBelow(history.vsSma200Pct)} its 200-day average of ${rupees(history.sma200)}`);
+    if (averages.length) technicalNote = `The ${day} close of ${rupees(history.lastClose)} was ${averages.join(' and ')}.`;
+  }
+
+  // Tone of the price action only: the day's move agreeing with the 50-day trend.
+  let sentiment = 'neutral';
+  if (change !== null && history?.vsSma50Pct != null) {
+    if (change > 0 && history.vsSma50Pct > 0) sentiment = 'bullish';
+    if (change < 0 && history.vsSma50Pct < 0) sentiment = 'bearish';
+  }
+
+  // Only a linked headline from the past week counts as current news.
+  const headline = news.find((n) => n?.title && n?.url && Date.now() - Date.parse(n.publishedAt) <= NEWS_MAX_AGE_MS);
+  return {
+    ...base,
+    available: true,
+    sentiment,
+    summary,
+    keyFactors,
+    technicalNote,
+    catalyst: headline ? headline.title : null,
+    sources: {
+      quote: quote.source,
+      history: history ? { source: 'end-of-day', asOf: history.asOf } : 'unavailable',
+      news: headline ? { title: headline.title, url: headline.url, publishedAt: headline.publishedAt || null } : null,
+    },
+  };
+}
+
+// Historical study (the "quant lab") of one symbol's saved daily candles. It describes the
+// past only: no forecasts, price targets, position sizes or buy/sell directives.
+export function historicalStudyFrom({ symbol, name = null, saved, benchmark = null, years = 5 }) {
+  const sym = bare(symbol).toUpperCase();
+  if (!saved) {
+    return {
+      success: false,
+      available: false,
+      symbol: sym,
+      message: `Saved daily price history for ${sym} is not available, so no historical study can be shown.`,
+      timestamp: new Date().toISOString(),
+    };
+  }
+  const isIndex = saved.benchmark || INDEX_SYMBOL.test(saved.file);
+  const s = candleStudy(saved.rows, { benchmark: isIndex ? null : benchmark, years });
+  const px = isIndex ? (n) => fmt(n) : rupees;
+  const day = dayOf(s.asOf);
+  const period = `${dayOf(s.from)} to ${day}`;
+
+  const trend = [`Over ${fmt(s.sessions, 0)} sessions (${period}) the close moved from ${px(s.firstClose)} to ${px(s.lastClose)}, ${signedPct(s.totalReturnPct)}${s.cagrPct !== null ? `, or ${signedPct(s.cagrPct)} a year compounded` : ''}.`];
+  if (s.sma200 !== null) trend.push(`The ${day} close was ${aboveBelow(s.vsSma200Pct)} the 200-day average of ${px(s.sma200)}${s.sma50 !== null ? ` and ${aboveBelow(s.vsSma50Pct)} the 50-day average of ${px(s.sma50)}` : ''}.`);
+
+  const risk = [];
+  if (s.annualVolatilityPct !== null) risk.push(`Annualised volatility of daily returns was ${fmt(s.annualVolatilityPct)}%.`);
+  if (s.maxDrawdown.pct < 0) risk.push(`The deepest fall from a previous high was ${fmt(Math.abs(s.maxDrawdown.pct))}%, from ${dayOf(s.maxDrawdown.peakDate)} to ${dayOf(s.maxDrawdown.troughDate)}.`);
+  if (s.var95Pct !== null) risk.push(`In the past year, 5% of sessions closed ${fmt(Math.abs(s.var95Pct))}% or more below the previous close.`);
+
+  const market = [`52-week range ${px(s.fiftyTwoWeek.low)} (${dayOf(s.fiftyTwoWeek.lowDate)}) to ${px(s.fiftyTwoWeek.high)} (${dayOf(s.fiftyTwoWeek.highDate)}).`];
+  if (s.betaVsNifty !== null) market.push(`Against NIFTY 50 over the same sessions, beta was ${fmt(s.betaVsNifty)} and correlation ${fmt(s.correlationVsNifty)}.`);
+  if (s.volumeBand) market.push(`The most shares traded in the past year between ${px(s.volumeBand.low)} and ${px(s.volumeBand.high)}.`);
+
+  return {
+    success: true,
+    available: true,
+    symbol: sym,
+    name,
+    sector: saved.sector,
+    source: 'end-of-day',
+    asOf: s.asOf,
+    basis: { from: s.from, to: s.asOf, sessions: s.sessions, years: s.years, requestedYears: years },
+    metrics: s,
+    reasoningTrace: [
+      { step: 1, agent: 'Trend & history', observation: trend.join(' ') },
+      { step: 2, agent: 'Risk', observation: risk.join(' ') || 'Not enough saved sessions to measure risk.' },
+      { step: 3, agent: 'Range & market sensitivity', observation: market.join(' ') },
+    ],
+    note: `Computed from saved NSE daily candles up to ${day}. Historical statistics describe past prices; they are not a forecast or a recommendation.`,
+    timestamp: new Date().toISOString(),
+  };
+}
+
 export class AIService {
-  constructor({ market = marketDataService, cache = aiCache } = {}) {
+  constructor({ market = marketDataService, news = newsService, cache = aiCache, dataDir = path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse') } = {}) {
     this.market = market;
+    this.news = news;
     this.cache = cache;
+    this.dataDir = dataDir;
     this.apiKey = process.env.GEMINI_API_KEY;
     this.model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
     this.baseUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -249,24 +498,35 @@ export class AIService {
     }
   }
 
+  // The quote is kept only when it is 'live' or 'end-of-day', and only its price fields: the
+  // provider fills volume, 52-week range and sector with placeholders when Upstox omits them,
+  // so the 52-week range comes from the saved daily candles instead.
   async assembleStockContext(symbol) {
-    try {
-      const [quote, candles, news] = await Promise.all([
-        marketDataService.getQuote(symbol).catch(() => null),
-        marketDataService.getHistoricalCandles(symbol, '1D').catch(() => []),
-        newsService.getStockNews(symbol, { limit: 4 }).catch(() => []),
-      ]);
-
-      return {
-        symbol: symbol.toUpperCase(),
-        quote,
-        recentCandlesCount: candles.length,
-        news: news.map((n) => n.title),
-      };
-    } catch (err) {
-      logger.warn({ err: err.message }, `Failed to assemble stock context for ${symbol}`);
-      return { symbol };
-    }
+    const upper = String(symbol || '').toUpperCase();
+    const [quote, saved, news] = await Promise.all([
+      this.market.getQuote(upper).catch(() => null),
+      readSavedCandles(this.dataDir, upper),
+      Promise.resolve(this.news.getStockNews(upper, { limit: 4 })).catch(() => []),
+    ]);
+    const real = quote && REAL_QUOTE_SOURCES.has(quote.source) && num(quote.ltp) > 0;
+    return {
+      symbol: upper,
+      quote: real ? {
+        source: quote.source,
+        ltp: num(quote.ltp),
+        change: num(quote.change),
+        changePercent: num(quote.changePercent),
+        open: num(quote.open) > 0 ? num(quote.open) : null,
+        high: num(quote.high) > 0 ? num(quote.high) : null,
+        low: num(quote.low) > 0 ? num(quote.low) : null,
+        previousClose: num(quote.previousClose) > 0 ? num(quote.previousClose) : null,
+        lastUpdated: quote.lastUpdated || null,
+      } : null,
+      history: real && saved ? candleStudy(saved.rows, { years: 1 }) : null,
+      news: (Array.isArray(news) ? news : [])
+        .filter((n) => n?.title && /^https?:\/\//.test(n.sourceUrl || n.url || ''))
+        .map((n) => ({ title: n.title, url: n.sourceUrl || n.url, publishedAt: n.publishedAt || null })),
+    };
   }
 
   async generateMarketSummary() {
@@ -343,31 +603,32 @@ Respond in JSON with exactly these keys:
   async generateStockInsight(symbol) {
     const cleanSym = (symbol || '').toUpperCase();
     const cacheKey = `ai:stock:${cleanSym}`;
-    const cached = aiCache.get(cacheKey);
-    if (cached) return cached;
+    const cached = this.cache.get(cacheKey);
+    if (cached && 'available' in cached) return cached;
 
     const context = await this.assembleStockContext(cleanSym);
-    const q = context.quote || {};
-    const ltp = q.ltp || 1500;
-    const changePct = q.changePercent || 0;
-    const isUp = changePct >= 0;
+    const insight = stockInsightFrom(context);
+    if (!insight.available) {
+      this.cache.set(cacheKey, insight, 60);
+      return insight;
+    }
 
-    // Try Gemini API if available
+    // Gemini may reword the insight, but only from the same data: a reply citing any figure
+    // the context does not contain is discarded. The catalyst stays a real, linked headline.
     if (this.apiKey && this.apiKey !== 'your-gemini-api-key') {
       try {
-        const prompt = `You are Pulse AI equity research analyst for Indian equities.
-Analyze this stock data for ${cleanSym}:
-Price: ₹${ltp}, Change: ${changePct}%, 52W High: ₹${q.fiftyTwoWeekHigh}, 52W Low: ₹${q.fiftyTwoWeekLow}, Volume: ${q.volume}, Sector: ${q.sector}.
-Recent news: ${context.news?.join('; ') || 'Normal trading activity'}.
+        const prompt = `You are Pulse AI, an equity research writer for Indian equities.
+Describe ${cleanSym} using ONLY the data below. Every number you write must appear in the data.
+Do not mention support or resistance levels, forecasts, corporate events, sector themes or
+anything else the data does not contain. Never recommend buying or selling.
+Data:
+${JSON.stringify(context, null, 2)}
 
-Respond in JSON format with:
+Respond in JSON with exactly these keys:
 {
-  "symbol": "${cleanSym}",
-  "sentiment": "bullish" | "neutral" | "bearish",
-  "summary": "2 sentences explaining price movement and technical positioning",
-  "keyFactors": ["Factor 1", "Factor 2", "Factor 3"],
-  "technicalNote": "1 sentence on support/resistance or 52-week corridor",
-  "catalyst": "Relevant corporate or sector catalyst"
+  "summary": "2 sentences on the price move and its position in the 52-week range",
+  "keyFactors": ["2-4 short data points"],
+  "technicalNote": "1 sentence on the close against its 50-day and 200-day averages"
 }`;
 
         const res = await axios.post(
@@ -382,37 +643,35 @@ Respond in JSON format with:
         const text = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
         if (text) {
           const parsed = JSON.parse(text);
-          aiCache.set(cacheKey, parsed, 900);
-          return parsed;
+          const written = {
+            summary: typeof parsed.summary === 'string' ? parsed.summary : null,
+            keyFactors: Array.isArray(parsed.keyFactors) ? parsed.keyFactors.filter((f) => typeof f === 'string') : null,
+            technicalNote: typeof parsed.technicalNote === 'string' ? parsed.technicalNote : null,
+          };
+          if (written.summary && numbersGrounded(JSON.stringify(written), context)) {
+            const result = { ...insight, ...Object.fromEntries(Object.entries(written).filter(([, v]) => v !== null)) };
+            this.cache.set(cacheKey, result, 900);
+            return result;
+          }
+          logger.warn(`Gemini stock insight for ${cleanSym} cited figures outside the data; using the data-built insight`);
         }
       } catch (err) {
-        logger.warn({ err: err.message }, `Gemini stock insight failed for ${cleanSym}, using synthesis`);
+        logger.warn({ err: err.message }, `Gemini stock insight failed for ${cleanSym}, using the data-built insight`);
       }
     }
 
-    const synthesis = {
-      symbol: cleanSym,
-      sentiment: isUp ? 'bullish' : 'neutral',
-      summary: `${cleanSym} is currently trading at ₹${ltp.toFixed(2)} (${isUp ? '+' : ''}${changePct.toFixed(2)}%), displaying ${isUp ? 'steady institutional accumulation' : 'disciplined consolidation'} across intraday candles. Relative volume confirms sustained participation.`,
-      keyFactors: [
-        `Price action reflects ${isUp ? 'resilience above 20-day moving average' : 'support near previous close'}`,
-        `Trading within 52-week corridor: ₹${(q.fiftyTwoWeekLow || ltp * 0.75).toFixed(2)} to ₹${(q.fiftyTwoWeekHigh || ltp * 1.25).toFixed(2)}`,
-        `Sector positioning: ${q.sector || 'Equities'} benefits from domestic macro expansion`,
-      ],
-      technicalNote: `Key immediate support is established at ₹${(ltp * 0.98).toFixed(2)}; primary resistance stands at ₹${(ltp * 1.025).toFixed(2)}.`,
-      catalyst: context.news?.[0] || 'Quarterly operational performance review and sector demand visibility.',
-      timestamp: new Date().toISOString(),
-    };
-
-    aiCache.set(cacheKey, synthesis, 900);
-    return synthesis;
+    this.cache.set(cacheKey, insight, 900);
+    return insight;
   }
 
   async chatResponse({ message, conversationId, symbol }) {
     const convId = conversationId || `conv-${Date.now()}`;
     const userMsg = (message || '').trim();
 
-    const targetSymbol = symbol || this._detectSymbol(userMsg);
+    // Index questions are answered from the market brief, never from a single-symbol quote.
+    const requested = symbol && !INDEX_SYMBOL.test(bare(symbol)) ? symbol : null;
+    const targetSymbol = requested || this._detectSymbol(userMsg);
+    const askedIndex = !targetSymbol && Boolean(symbol);
     let stockContext = null;
     if (targetSymbol) {
       stockContext = await this.assembleStockContext(targetSymbol);
@@ -440,7 +699,9 @@ Ground all statements in the actual numbers provided. Never recommend buying or 
         );
 
         const reply = res.data?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (reply) {
+        if (reply && !numbersGrounded(reply, { userMsg, marketContext, stockContext })) {
+          logger.warn('Gemini chat reply cited figures outside the data; using the data-built reply');
+        } else if (reply) {
           this._saveMessage(convId, userMsg, reply);
           return {
             conversationId: convId,
@@ -455,7 +716,7 @@ Ground all statements in the actual numbers provided. Never recommend buying or 
     }
 
     // High-fidelity dynamic intelligent response
-    const reply = this._generateSmartReply(userMsg, targetSymbol, stockContext, marketContext);
+    const reply = this._generateSmartReply(userMsg, targetSymbol, stockContext, marketContext, { askedIndex });
     this._saveMessage(convId, userMsg, reply);
 
     return {
@@ -466,40 +727,38 @@ Ground all statements in the actual numbers provided. Never recommend buying or 
     };
   }
 
+  // Stock tickers named in the question, matched as whole words. Index names (NIFTY, SENSEX)
+  // are not symbols here: those questions go to the market brief.
   _detectSymbol(query) {
-    const q = query.toUpperCase();
-    const candidates = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'TATAMOTORS', 'NIFTY', 'SENSEX', 'SBIN', 'ITC', 'LT', 'TITAN', 'ZOMATO', 'BAJFINANCE', 'SUNPHARMA'];
+    const q = String(query || '').toUpperCase();
+    const candidates = ['RELIANCE', 'TCS', 'INFY', 'HDFCBANK', 'ICICIBANK', 'SBIN', 'ITC', 'LT', 'TITAN', 'BAJFINANCE', 'SUNPHARMA'];
     for (const sym of candidates) {
-      if (q.includes(sym)) return `NSE:${sym}`;
+      if (new RegExp(`(^|[^A-Z0-9&])${sym}([^A-Z0-9&]|$)`).test(q)) return `NSE:${sym}`;
     }
     return null;
   }
 
-  _generateSmartReply(userQuery, symbol, stockContext, marketContext) {
+  _generateSmartReply(userQuery, symbol, stockContext, marketContext, { askedIndex = false } = {}) {
     const qLower = userQuery.toLowerCase();
-    const q = stockContext?.quote;
 
-    if (symbol && q) {
-      const isUp = q.changePercent >= 0;
-      return `### Analysis for **${symbol}** (${q.name})
+    if (symbol && stockContext) {
+      const insight = stockInsightFrom(stockContext);
+      if (!insight.available) {
+        return `### ${insight.symbol}
 
-- **Last Traded Price**: **₹${q.ltp?.toFixed(2)}** (${isUp ? '+' : ''}${q.changePercent?.toFixed(2)}%)
-- **Day's Range**: ₹${q.low?.toFixed(2)} – ₹${q.high?.toFixed(2)}
-- **52-Week Range**: ₹${q.fiftyTwoWeekLow?.toFixed(2)} – ₹${q.fiftyTwoWeekHigh?.toFixed(2)}
-- **Trading Volume**: ${q.volume?.toLocaleString('en-IN')} shares
-- **Sector**: ${q.sector || 'Equities'}
-
-#### Key Takeaway
-${q.name} is currently displaying **${isUp ? 'resilient upward' : 'measured consolidation'}** momentum. Trading volumes are aligned with average participation rates. 
-
-${stockContext.news?.[0] ? `**Recent Catalyst:** ${stockContext.news[0]}` : ''}
-
-*Disclaimer: Pulse AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*`;
+${insight.summary}`;
+      }
+      const lines = [`### ${insight.symbol}`, '', insight.summary];
+      if (insight.keyFactors.length) lines.push('', '#### Key Data Points', ...insight.keyFactors.map((f) => `- ${f}`));
+      if (insight.technicalNote) lines.push('', insight.technicalNote);
+      if (insight.sources.news) lines.push('', `**Latest headline** (${dayOf(insight.sources.news.publishedAt.slice(0, 10))}): [${insight.sources.news.title}](${insight.sources.news.url})`);
+      lines.push('', '*Pulse AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*');
+      return lines.join('\n');
     }
 
     // Last session / market questions: the same data-built brief the dashboard shows.
     const askedWrap = ['yesterday', 'last day', 'after market', 'post market', 'closed', 'what happened'].some((k) => qLower.includes(k));
-    const askedMarket = ['nifty', 'market', 'sensex', 'today'].some((k) => qLower.includes(k));
+    const askedMarket = askedIndex || ['nifty', 'market', 'sensex', 'today', 'index', 'indices'].some((k) => qLower.includes(k));
     if (askedWrap || askedMarket) {
       const brief = buildMarketBrief(marketContext);
       if (!marketContext.indices?.length) {
@@ -552,169 +811,18 @@ How can I assist your market analysis right now?`;
     }));
   }
 
-  /**
-   * Autonomous Multi-Agent Quantitative Pipeline with 5-Year Big-Data Market Trend ML
-   * Evaluates 1,250 historical sessions (156,250+ data vectors), Hurst Exponent, 
-   * Dynamic Time Warping (DTW) pattern similarity, and 10,000-path Monte Carlo simulations.
-   */
-  async runAgenticAnalysis({ symbol = 'NSE:TATAMOTORS', strategy = '5yr-trend-alpha', timeframe = '5Y' }) {
-    const cleanSym = (symbol || 'NSE:TATAMOTORS').toUpperCase();
-    const ticker = cleanSym.replace(/^NSE:|^BSE:/, '');
-
-    // 1. Fetch live market quote & context
-    let quote = null;
-    try {
-      quote = await marketDataService.getQuote(cleanSym);
-    } catch (e) {
-      quote = { symbol: cleanSym, ltp: 984.60, change: 38.40, changePercent: 4.06, name: `${ticker} Ltd` };
-    }
-
-    const ltp = quote?.ltp || 984.60;
-    const isPositive = (quote?.change ?? 0) >= 0;
-
-    // 2. High-Dimensional 5-Year Statistical & Machine Learning Model
-    // 1,250 sessions * 5 price points + 31,250 15-min intraday candles = 156,250+ data vectors
-    const totalDataPoints = 156250;
-    const totalTradingSessions = 1250;
-
-    // Deterministic stock-specific quantitative profiles
-    const stockPriors = {
-      'TATAMOTORS': { cagr: 34.8, hurst: 0.69, beta: 1.34, sharpe: 1.88, poc: 820.00, regime: 'Automotive & EV Capex Expansion', matchedCycle: 'Nov 2020 -- Jan 2021 Capex Supercycle', similarity: 88.4 },
-      'RELIANCE': { cagr: 22.4, hurst: 0.64, beta: 1.08, sharpe: 1.62, poc: 2650.00, regime: 'Conglomerate Retail & Energy Capex', matchedCycle: 'Aug 2021 -- Oct 2021 Telecom & Retail Breakout', similarity: 86.2 },
-      'HDFCBANK': { cagr: 16.8, hurst: 0.61, beta: 1.15, sharpe: 1.45, poc: 1540.00, regime: 'Banking Credit Growth & NIM Rebound', matchedCycle: 'Oct 2022 -- Dec 2022 Financial Sector Re-rating', similarity: 83.7 },
-      'INFY': { cagr: 19.4, hurst: 0.63, beta: 1.12, sharpe: 1.54, poc: 1580.00, regime: 'Digital Transformation & Cloud Discretionary', matchedCycle: 'Jun 2021 -- Nov 2021 Tech Multi-Year Outperformance', similarity: 85.1 },
-      'ITC': { cagr: 24.6, hurst: 0.67, beta: 0.78, sharpe: 2.15, poc: 410.00, regime: 'FMCG Margin Expansion & Capital Return', matchedCycle: 'Feb 2022 -- Aug 2022 Low-Beta Outperformance Cycle', similarity: 89.2 },
-      'TCS': { cagr: 18.2, hurst: 0.62, beta: 0.95, sharpe: 1.58, poc: 3820.00, regime: 'Enterprise Tech Renewal & GenAI Demand', matchedCycle: 'Jul 2021 -- Jan 2022 Secular IT Markup', similarity: 84.6 },
-      'SBIN': { cagr: 29.5, hurst: 0.71, beta: 1.28, sharpe: 1.94, poc: 640.00, regime: 'Public Sector Banking Capex & ROE Upgrade', matchedCycle: 'May 2022 -- Dec 2022 PSU Bank Supercycle', similarity: 91.0 },
-    };
-
-    const prior = stockPriors[ticker] || {
-      cagr: 24.2,
-      hurst: 0.65,
-      beta: 1.18,
-      sharpe: 1.65,
-      poc: Number((ltp * 0.82).toFixed(2)),
-      regime: 'Secular Indian Equity Capital Formation',
-      matchedCycle: 'April 2023 -- Sept 2023 Broad-Market Expansion',
-      similarity: 85.0,
-    };
-
-    // Moving average & regime distances
-    const dma200 = Number((ltp * 0.88).toFixed(2));
-    const dma50 = Number((ltp * 0.95).toFixed(2));
-    const dmaDeviationPct = Number((((ltp - dma200) / dma200) * 100).toFixed(2));
-
-    // 3. Monte Carlo 10,000-Path Geometric Brownian Motion (30-Session Forward Simulation)
-    const mcTarget1HitProb = 78.4;
-    const mcStopLossBreachProb = 11.2;
-    const mcExpectedReturn30D = 8.6;
-    const mcTailDrawdownCVaR99 = -4.8;
-
-    // 4. Parametric Risk & VaR (95% 1-Day Value-at-Risk & 99% Conditional VaR)
-    const dailyVolatility = Number((1.65 + (Math.abs(ticker.charCodeAt(1) || 3) % 0.9)).toFixed(2));
-    const var95 = Number((ltp * (dailyVolatility / 100) * 1.645).toFixed(2));
-    const cvar99 = Number((ltp * (dailyVolatility / 100) * 2.326).toFixed(2));
-    const stopLoss = Number((ltp - var95 * 1.25).toFixed(2));
-    const target1 = Number((ltp + var95 * 2.4).toFixed(2));
-    const target2 = Number((ltp + var95 * 4.1).toFixed(2));
-    const riskRewardRatio = '1 : 3.4';
-    const kellySizePct = '9.2% -- 12.5% Max Portfolio Allocation';
-
-    // 5. 3 Intuitive AI Specialists (Human-Friendly Reasoning Chain)
-    const reasoningTrace = [
-      {
-        step: 1,
-        agent: '📈 5-Year Trend & History Expert',
-        status: 'VERIFIED',
-        latency: '14ms',
-        action: '5-YEAR_CYCLE_AND_GROWTH_AUDIT',
-        thought: `Looking back at 5 years of daily prices (1,250 trading sessions) to check if the company has consistent long-term growth and healthy upward momentum.`,
-        observation: `Over the past 5 years, ${cleanSym} has delivered an average growth of +${prior.cagr}% per year. The stock is currently trading safely +${dmaDeviationPct}% above its 200-day average line (₹${dma200}), which confirms a strong, steady long-term uptrend.`,
-      },
-      {
-        step: 2,
-        agent: '🏦 Big Money (FII / DII) Tracker',
-        status: 'VERIFIED',
-        latency: '22ms',
-        action: 'INSTITUTIONAL_BUYING_AUDIT',
-        thought: `Checking whether big players, mutual funds, and foreign institutional investors (FIIs) are putting real money into this stock.`,
-        observation: `Big institutional investors are actively accumulating with over +₹3,953 Cr in net market buying. Over 58% of all traded shares were taken into real delivery (Demat accounts) rather than quick intraday speculation, showing genuine confidence by large funds.`,
-      },
-      {
-        step: 3,
-        agent: '🛡️ Safety & Risk Guardian',
-        status: 'VERIFIED',
-        latency: '18ms',
-        action: 'SAFETY_TEST_AND_CAPITAL_PROTECTION',
-        thought: `Running 10,000 computer scenario tests to check the odds of reaching profit targets versus risking money, and setting protective stop-loss rules.`,
-        observation: `Scenario tests show a 78% high probability of reaching Target 1 (₹${target1}) before touching any downside. Set your safety stop-loss at ₹${stopLoss} to protect your capital, and invest no more than ${kellySizePct} of your trading money.`,
-      },
-    ];
-
-    // Executive readable takeaways in crystal-clear everyday English
-    const executiveDossier = {
-      whySelectedNow: `${quote?.name || ticker} has grown an impressive +${prior.cagr}% per year over the last 5 years. Right now, big institutional investors and mutual funds are actively buying, and the price is in a confirmed upward trend.`,
-      quantitativeEdge: `Testing 10,000 past market scenarios shows a 78% high chance of reaching the first profit target (₹${target1}) with a strong 1:3.4 reward-to-risk ratio.`,
-      invalidationLevel: `If the stock price drops below the safety line at ₹${stopLoss}, the positive trend has weakened. Exit immediately to protect your hard-earned money.`,
-      executionGuidance: `Recommended entry: Around ₹${ltp}. Recommended allocation: No more than 10% to 12% of your account balance so your risk stays low and safe.`,
-    };
-
-    const directive = {
-      ticker: cleanSym,
-      companyName: quote?.name || `${ticker} Ltd`,
-      strategy: strategy === '5yr-trend-alpha' ? '5-Year Trend & Momentum Strategy' : strategy === 'institutional-flow' ? 'Big Money (FII/DII) Follower' : 'Safe Dip Buyer & Bounce Strategy',
-      action: 'BUY / ACCUMULATE',
-      conviction: `${Math.min(96, Math.floor(prior.similarity))}%`,
-      regime: 'Confirmed Long-Term Uptrend',
-      currentPrice: ltp,
-      target1,
-      target2,
-      stopLoss,
-      riskRewardRatio,
-      kellyAllocation: '10% -- 12% of Account (Safe Limit)',
-      similarityScore: `${prior.similarity}%`,
-      similarityPeriod: prior.matchedCycle,
-      fiveYearCAGR: `+${prior.cagr}% / yr`,
-      hurstExponent: 'Strong Uptrend',
-      dma200: `₹${dma200}`,
-      dmaDeviation: `+${dmaDeviationPct}%`,
-      volumeProfilePOC: `₹${prior.poc}`,
-      var95: `₹${var95}`,
-      cvar99: `₹${cvar99}`,
-      mcTargetHitProb: `${mcTarget1HitProb}%`,
-      mcStopBreachProb: `${mcStopLossBreachProb}%`,
-      timestamp: new Date().toISOString(),
-    };
-
-    return {
-      success: true,
-      symbol: cleanSym,
-      timestamp: new Date().toISOString(),
-      reasoningTrace,
-      directive,
-      executiveDossier,
-      mlFactors: {
-        totalDataPointsProcessed: totalDataPoints,
-        fiveYearSessionsAnalyzed: totalTradingSessions,
-        intradayCandlesEvaluated: 31250,
-        historicalCAGR: `+${prior.cagr}%`,
-        hurstExponent: prior.hurst,
-        hurstInterpretation: 'Persistent Secular Trending (H > 0.50)',
-        dma200,
-        dma50,
-        dmaDeviation: `+${dmaDeviationPct}%`,
-        volumeProfilePOC: `₹${prior.poc}`,
-        historicalCorrelation: `${prior.similarity}%`,
-        matchedRegime: prior.matchedCycle,
-        monteCarloRuns: 10000,
-        target1HitProbability: `${mcTarget1HitProb}%`,
-        stopLossBreachProbability: `${mcStopLossBreachProb}%`,
-        dailyVaR95: `₹${var95}`,
-        cvar99: `₹${cvar99}`,
-        betaVsNifty: prior.beta.toFixed(2),
-        sharpeRatio5Yr: prior.sharpe.toFixed(2),
-      },
-    };
+  // Historical study of a symbol's saved daily candles (the dashboard's "quant lab" link).
+  // Every figure is computed from data/pulse/candles/<SYMBOL>.json and NIFTY_50.json; a
+  // symbol without a saved file returns available: false and no figures. `strategy` is
+  // accepted for API compatibility and ignored: the study gives no buy/sell directives.
+  async runAgenticAnalysis({ symbol, timeframe = '5Y' } = {}) {
+    const sym = String(symbol || '').trim().toUpperCase();
+    const years = Math.min(10, Math.max(1, Number(/^(\d+)Y$/i.exec(String(timeframe || ''))?.[1]) || 5));
+    const [saved, benchmark] = sym
+      ? await Promise.all([readSavedCandles(this.dataDir, sym), readSavedCandles(this.dataDir, 'NIFTY_50')])
+      : [null, null];
+    const name = saved ? (readNames(this.dataDir) || {})[saved.file] || null : null;
+    return historicalStudyFrom({ symbol: saved?.file || sym || 'symbol', name, saved, benchmark: benchmark?.rows || null, years });
   }
 }
 
