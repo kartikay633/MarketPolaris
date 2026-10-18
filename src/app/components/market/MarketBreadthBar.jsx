@@ -1,8 +1,8 @@
-// Market breadth pane — advancing / unchanged / declining counts with a tick-density bar.
+// Market breadth pane — advancing / unchanged / declining counts across the tracked NSE universe.
 import React from 'react';
 import { formatNumber } from '../../utils/formatters';
 
-export function MarketBreadthBar({ breadth }) {
+export function MarketBreadthBar({ breadth, stamp = null }) {
   if (!breadth) return null;
 
   const { advancing = 0, declining = 0, unchanged = 0 } = breadth;
@@ -17,10 +17,8 @@ export function MarketBreadthBar({ breadth }) {
   return (
     <div className="fd-pane">
       <div className="fd-pane-head">
-        <span className="fd-lbl">Breadth · NSE</span>
-        <span className="fd-lbl" style={{ color: isBullish ? 'var(--positive-text)' : 'var(--negative-text)' }}>
-          {isBullish ? 'Bullish skew' : 'Bearish skew'} · A/D {adRatio}
-        </span>
+        <span className="fd-lbl">Breadth · tracked NSE stocks</span>
+        {stamp}
       </div>
 
       <div className="fd-breadth-nums">
@@ -47,7 +45,10 @@ export function MarketBreadthBar({ breadth }) {
         <div className="unc" style={{ flex: unchanged || 0.0001 }} />
         <div className="dec" style={{ flex: declining || 0.0001 }} />
       </div>
-      <div className="fd-lbl" style={{ marginTop: '12px' }}>{formatNumber(total, 0)} instruments traded</div>
+      <div className="fd-lbl" style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', gap: '12px' }}>
+        <span>{formatNumber(total, 0)} large &amp; mid caps tracked</span>
+        <span style={{ color: isBullish ? 'var(--positive-text)' : 'var(--negative-text)' }}>A/D {adRatio}</span>
+      </div>
     </div>
   );
 }

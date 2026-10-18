@@ -47,7 +47,11 @@ export class AIService {
         date: '19-Sep-2026',
       };
 
-      const turnover = overview?.turnover || {
+      // The overview reports NSE turnover in ₹ crore; this context still speaks in display strings.
+      const turnover = overview?.turnover ? {
+        ...overview.turnover,
+        totalCash: `₹${Math.round(overview.turnover.nseCashCr).toLocaleString('en-IN')} Cr`,
+      } : {
         totalCash: '₹48,610 Cr',
         nseCash: '₹42,180 Cr',
         bseCash: '₹6,430 Cr',

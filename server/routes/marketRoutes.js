@@ -17,8 +17,11 @@ router.get('/gainers', optionalAuth, (req, res, next) => marketController.getGai
 // GET /api/market/losers — Top daily losers
 router.get('/losers', optionalAuth, (req, res, next) => marketController.getLosers(req, res, next));
 
-// GET /api/market/active — Volume leaders
+// GET /api/market/active — Traded-value leaders
 router.get('/active', optionalAuth, (req, res, next) => marketController.getActive(req, res, next));
+
+// GET /api/market/stocks — Every covered stock from the same snapshot (screener, heatmap)
+router.get('/stocks', optionalAuth, (req, res, next) => marketController.getStocks(req, res, next));
 
 // GET /api/market/search — Quick symbol search
 router.get('/search', optionalAuth, (req, res, next) => marketController.search(req, res, next));

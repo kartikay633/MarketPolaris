@@ -8,10 +8,10 @@ export default defineConfig({
   server: {
     host: true,
     port: 5173,
-    // Proxy API requests to Express backend
+    // Proxy API requests to Express backend (API_PROXY_TARGET overrides, e.g. a second API on another port)
     proxy: {
       '/api': {
-        target: 'http://localhost:3001',
+        target: process.env.API_PROXY_TARGET || 'http://localhost:3001',
         changeOrigin: true,
         secure: false,
       },

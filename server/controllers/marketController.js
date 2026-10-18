@@ -50,6 +50,14 @@ export class MarketController {
     }
   }
 
+  async getStocks(req, res, next) {
+    try {
+      res.json(await marketDataService.getStocks());
+    } catch (err) {
+      next(err);
+    }
+  }
+
   async getQuote(req, res, next) {
     try {
       const { symbol } = req.params;

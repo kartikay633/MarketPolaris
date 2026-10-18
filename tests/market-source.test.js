@@ -26,7 +26,9 @@ function stubAxios(t, impl) {
   t.after(() => { axios.get = original; });
 }
 
-test('without an Upstox token every index, quote and overview is marked fallback', async t => {
+// The overview, movers and screener never serve built-in values; tests/market-snapshot.test.js
+// covers them. This file covers the standalone index and single-quote paths.
+test('without an Upstox token every index and quote is marked fallback', async t => {
   stubAxios(t, async () => { throw new Error('network must not be called without a token'); });
   const p = provider({ live: false });
 
@@ -37,10 +39,6 @@ test('without an Upstox token every index, quote and overview is marked fallback
   for (const sym of ['RELIANCE', 'NSE:TCS', 'UNKNOWNCO']) {
     assert.equal((await p.getQuote(sym)).source, SOURCE_FALLBACK, sym);
   }
-
-  const overview = await p.getMarketOverview();
-  assert.equal(overview.source, SOURCE_FALLBACK);
-  assert.equal(overview.sources.indices, SOURCE_FALLBACK);
 });
 
 test('a successful Upstox response is marked live', async t => {
@@ -57,14 +55,6 @@ test('a successful Upstox response is marked live', async t => {
   const quote = await p.getQuote('RELIANCE');
   assert.equal(quote.source, SOURCE_LIVE);
   assert.equal(quote.ltp, 1411.2);
-
-  // Indices are live, but breadth/sectors/turnover/flows/derivatives are still built-in.
-  const overview = await p.getMarketOverview();
-  assert.equal(overview.sources.indices, SOURCE_LIVE);
-  for (const block of ['breadth', 'sectors', 'turnover', 'institutionalFlows', 'derivatives']) {
-    assert.equal(overview.sources[block], SOURCE_FALLBACK, block);
-  }
-  assert.equal(overview.source, SOURCE_FALLBACK);
 });
 
 test('a failed or empty Upstox response falls back and says so', async t => {
@@ -84,14 +74,8 @@ test('a failed or empty Upstox response falls back and says so', async t => {
   }
 });
 
-test('always-built-in movers lists are marked fallback and the service keeps the marker', async t => {
+test('the service keeps the source marker', async t => {
   stubAxios(t, async () => { throw new Error('unused'); });
-  const p = provider({ live: true });
-  for (const rows of [await p.getGainers(3), await p.getLosers(3), await p.getActive(3)]) {
-    assert.equal(rows.length, 3);
-    for (const row of rows) assert.equal(row.source, SOURCE_FALLBACK);
-  }
-
   const service = new MarketDataService(provider({ live: false }));
   assert.equal((await service.getQuote('INFY')).source, SOURCE_FALLBACK);
   for (const idx of await service.getIndices()) assert.equal(idx.source, SOURCE_FALLBACK);

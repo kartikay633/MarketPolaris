@@ -609,3 +609,8 @@ input:focus, select:focus, textarea:focus, .input:focus, .select:focus { border-
 
 /* Placeholder while a page chunk loads (normally prefetched, so rarely seen). */
 .app-page-loading { min-height: 60vh; }
+
+/* Freshness tag on market-data blocks that are not live */
+.fd-stamp { color: var(--text-dim); letter-spacing: 0.12em; white-space: nowrap; }
+.fd-stamp--live { color: var(--positive-text); }
+.fd-unavailable { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 120px; color: var(--text-muted); font-size: 13px; }

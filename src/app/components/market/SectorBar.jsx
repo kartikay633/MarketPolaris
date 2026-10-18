@@ -2,7 +2,7 @@
 import React from 'react';
 import { formatPercent } from '../../utils/formatters';
 
-export function SectorBar({ sectors = [] }) {
+export function SectorBar({ sectors = [], stamp = null }) {
   if (!sectors || sectors.length === 0) return null;
 
   const sorted = [...sectors].sort((a, b) => b.changePercent - a.changePercent);
@@ -11,8 +11,8 @@ export function SectorBar({ sectors = [] }) {
   return (
     <div className="fd-pane">
       <div className="fd-pane-head">
-        <span className="fd-lbl">Sectors · % change</span>
-        <span className="fd-lbl">NSE sector indices</span>
+        <span className="fd-lbl">NSE sector indices · % change</span>
+        {stamp || <span className="fd-lbl">NSE sector indices</span>}
       </div>
       <div style={{ marginTop: '10px' }}>
         {sorted.map((sec, i) => {

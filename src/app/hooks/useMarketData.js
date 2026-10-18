@@ -66,6 +66,19 @@ export function useActive(limit = 10) {
   });
 }
 
+// Every covered stock from the market snapshot: { source, asOf, session, stocks }
+export function useMarketStocks() {
+  return useQuery({
+    queryKey: ['market', 'stocks'],
+    queryFn: async () => {
+      const res = await api.get('/market/stocks');
+      return res.data;
+    },
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+}
+
 // Shared query options so useQueries callers reuse the ['stock', symbol] cache
 export function stockQuoteQuery(symbol) {
   return {

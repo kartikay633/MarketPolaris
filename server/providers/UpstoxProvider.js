@@ -2,9 +2,19 @@
 import axios from 'axios';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { gunzipSync } from 'node:zlib';
+import NodeCache from 'node-cache';
 import { MarketDataProvider } from './MarketDataProvider.js';
-import { getMarketStatus } from '../utils/marketHours.js';
+import { nseClient } from './nseClient.js';
+import {
+  SOURCE_EOD, SOURCE_UNAVAILABLE, loadUniverse, readCandleSummaries, quoteKeys, snapshotFromQuotes,
+  snapshotFromCandles, movers, breadthOf, sectorsOf, analyzeOptionChain, readNames, saveNames,
+} from './marketSnapshot.js';
+import { getMarketStatus, isMarketOpen } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
+
+export { SOURCE_EOD, SOURCE_UNAVAILABLE };
+const NSE_INSTRUMENTS_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
 
 // Symbol mapping between Market Pulse internal format and Upstox instrument keys
 const RAW_MAPPINGS = {
@@ -49,7 +59,9 @@ const RAW_MAPPINGS = {
 };
 
 // Every index, quote and overview payload carries `source`, set by the code path
-// that produced it: 'live' for an Upstox response, 'fallback' for built-in values.
+// that produced it: 'live' for an Upstox response, 'end-of-day' for saved candles or an
+// exchange end-of-day report, 'fallback' for built-in values (single quotes and the
+// standalone indices endpoint only; the overview, movers and screener never serve them).
 export const SOURCE_LIVE = 'live';
 export const SOURCE_FALLBACK = 'fallback';
 
@@ -79,6 +91,10 @@ export class UpstoxProvider extends MarketDataProvider {
     this.token = process.env.UPSTOX_ANALYTICS_TOKEN;
     this.baseUrl = process.env.UPSTOX_API_BASE_URL || 'https://api.upstox.com/v2';
     this.isLive = Boolean(this.token && this.token !== 'your-analytics-token');
+    this.dataDir = path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse');
+    this.nse = nseClient;
+    this.cache = new NodeCache({ checkperiod: 60, useClones: false });
+    this.inflight = new Map();
 
     if (this.isLive) {
       logger.info('Upstox credentials active — connected to live NSE/BSE Upstox feeds');
@@ -87,70 +103,44 @@ export class UpstoxProvider extends MarketDataProvider {
     }
   }
 
+  // Each block carries its own source: 'live' (Upstox feed), 'end-of-day' (saved candles or an
+  // exchange end-of-day report) or 'unavailable' (block is null; the UI shows a neutral state).
   async getMarketOverview() {
     const marketState = getMarketStatus();
-    const indices = await this.getIndices();
+    const [snap, derivatives, institutionalFlows, turnover] = await Promise.all([
+      this.getSnapshot(),
+      this._cached('derivatives', () => this._getDerivatives()),
+      this._cached('flows', () => this.nse.getFiiDii(), { open: 15 * 60, closed: 60 * 60 }),
+      this._cached('turnover', () => this.nse.getTurnover(), { open: 5 * 60, closed: 30 * 60 }),
+    ]);
 
-    const breadth = {
-      advancing: 1342,
-      declining: 814,
-      unchanged: 112,
+    const today = new Date(Date.now() + 19800000).toISOString().slice(0, 10);
+    const eodOrLive = (asOf) => (marketState.status === 'OPEN' && asOf === today ? SOURCE_LIVE : SOURCE_EOD);
+    const indices = snap?.indices || [];
+    const sectors = snap?.sectorIndices?.length ? sectorsOf(snap.sectorIndices) : null;
+    const breadth = snap?.stocks?.length ? breadthOf(snap.stocks) : null;
+
+    const block = (data, source, asOf) => ({ source: data ? source : SOURCE_UNAVAILABLE, asOf: data ? asOf : null });
+    const meta = {
+      indices: block(indices.length ? indices : null, snap?.source, snap?.asOf),
+      breadth: block(breadth, snap?.source, snap?.asOf),
+      sectors: block(sectors, snap?.source, snap?.asOf),
+      turnover: block(turnover, turnover && eodOrLive(turnover.asOf), turnover?.asOf),
+      institutionalFlows: block(institutionalFlows, SOURCE_EOD, institutionalFlows?.asOf),
+      derivatives: block(derivatives, SOURCE_LIVE, derivatives && (snap?.source === SOURCE_LIVE ? snap.asOf : new Date().toISOString())),
     };
-
-    const sectors = [
-      { name: 'Nifty IT', changePercent: 1.64, positive: true },
-      { name: 'Nifty Bank', changePercent: 0.82, positive: true },
-      { name: 'Nifty Auto', changePercent: 1.15, positive: true },
-      { name: 'Nifty Pharma', changePercent: -0.45, positive: false },
-      { name: 'Nifty FMCG', changePercent: 0.32, positive: true },
-      { name: 'Nifty Metal', changePercent: -0.88, positive: false },
-      { name: 'Nifty Energy', changePercent: 1.42, positive: true },
-      { name: 'Nifty Realty', changePercent: 2.18, positive: true },
-    ];
-
-    const turnover = {
-      nseCash: '₹42,180 Cr',
-      bseCash: '₹6,430 Cr',
-      totalCash: '₹48,610 Cr',
-      nseFo: '₹182.4 Lakh Cr',
-      totalTrades: '2.45 Cr',
-    };
-
-    const institutionalFlows = {
-      fiiNet: 1842.60,
-      fiiBuy: 12410.20,
-      fiiSell: 10567.60,
-      diiNet: 2110.45,
-      diiBuy: 9820.50,
-      diiSell: 7710.05,
-      date: '19-Sep-2026',
-    };
-
-    const derivatives = {
-      pcr: 1.15,
-      maxPain: 23300,
-      atmIv: 12.4,
-      callWall: 23500,
-      putWall: 23200,
-      sentiment: 'Bullish (PCR > 1.0)',
-    };
-
-    // Only indices can come from Upstox; the remaining blocks are always built-in.
-    const sources = {
-      indices: indices.length > 0 && indices.every((idx) => idx.source === SOURCE_LIVE) ? SOURCE_LIVE : SOURCE_FALLBACK,
-      breadth: SOURCE_FALLBACK,
-      sectors: SOURCE_FALLBACK,
-      turnover: SOURCE_FALLBACK,
-      institutionalFlows: SOURCE_FALLBACK,
-      derivatives: SOURCE_FALLBACK,
-    };
+    const sources = Object.fromEntries(Object.entries(meta).map(([k, v]) => [k, v.source]));
+    const asOf = Object.fromEntries(Object.entries(meta).map(([k, v]) => [k, v.asOf]));
+    const shown = Object.values(sources).filter((s) => s !== SOURCE_UNAVAILABLE);
 
     return {
       status: marketState.status,
       statusMessage: marketState.reason,
       timestamp: new Date().toISOString(),
-      source: Object.values(sources).every((s) => s === SOURCE_LIVE) ? SOURCE_LIVE : SOURCE_FALLBACK,
+      source: shown.length && shown.every((s) => s === SOURCE_LIVE) ? SOURCE_LIVE : SOURCE_EOD,
       sources,
+      asOf,
+      session: snap?.session || null,
       indices,
       breadth,
       sectors,
@@ -158,6 +148,103 @@ export class UpstoxProvider extends MarketDataProvider {
       institutionalFlows,
       derivatives,
     };
+  }
+
+  // One snapshot of the covered universe shared by the overview, movers and screener:
+  // a single batched Upstox quote call when the feed is live, else the latest saved candles.
+  async getSnapshot() {
+    return this._cached('snapshot', async () => {
+      const universe = this._universe();
+      if (!universe.stocks.length) return null;
+      const summaries = await readCandleSummaries(this.dataDir, [
+        ...universe.stocks.map((i) => i.symbol),
+        ...universe.sectorIndices.map((i) => i.symbol),
+        ...universe.headline.map((h) => h.collected || h.symbol),
+      ]);
+      const names = this._names(universe);
+
+      if (this.isLive) {
+        try {
+          const res = await axios.get(`${this.baseUrl}/market-quote/quotes`, {
+            params: { instrument_key: quoteKeys(universe).join(',') },
+            headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/json' },
+            timeout: 10000,
+          });
+          const live = snapshotFromQuotes(universe, res.data?.data, summaries, names);
+          if (live) return live;
+          logger.warn('Upstox batched quote covered too little of the universe; using saved end-of-day candles');
+        } catch (err) {
+          logger.warn({ err: err.message }, 'Upstox batched quote failed; using saved end-of-day candles');
+        }
+      }
+      return snapshotFromCandles(universe, summaries, names);
+    }, { open: 15, closed: 120 });
+  }
+
+  // NIFTY option chain for the nearest expiry that has not passed. Live feed only: the saved
+  // F&O history holds stock options, not index options, so there is no end-of-day substitute.
+  async _getDerivatives() {
+    if (!this.isLive) return null;
+    const underlying = 'NSE_INDEX|Nifty 50';
+    const headers = { Authorization: `Bearer ${this.token}`, Accept: 'application/json' };
+    try {
+      const expiries = await this._cached('nifty-expiries', async () => {
+        const res = await axios.get(`${this.baseUrl}/option/contract`, { params: { instrument_key: underlying }, headers, timeout: 8000 });
+        const list = [...new Set((res.data?.data || []).map((c) => c.expiry).filter(Boolean))].sort();
+        return list.length ? list : null;
+      }, { open: 6 * 3600, closed: 6 * 3600 });
+      const today = new Date(Date.now() + 19800000).toISOString().slice(0, 10);
+      const expiry = expiries?.find((d) => d >= today);
+      if (!expiry) return null;
+      const res = await axios.get(`${this.baseUrl}/option/chain`, { params: { instrument_key: underlying, expiry_date: expiry }, headers, timeout: 8000 });
+      return analyzeOptionChain(res.data?.data);
+    } catch (err) {
+      logger.warn({ err: err.message }, 'Upstox NIFTY option chain unavailable');
+      return null;
+    }
+  }
+
+  _universe() {
+    if (!this.universe) this.universe = loadUniverse(this.dataDir);
+    return this.universe;
+  }
+
+  // Company names come from Upstox's public NSE instrument list, saved once next to the
+  // collection. Until that file exists rows show the trading symbol as the name.
+  _names(universe) {
+    if (this.names) return this.names;
+    const saved = readNames(this.dataDir);
+    if (saved) {
+      this.names = saved;
+      return saved;
+    }
+    if (this.isLive && !this.namesRequested) {
+      this.namesRequested = true;
+      axios.get(NSE_INSTRUMENTS_URL, { responseType: 'arraybuffer', timeout: 30000 })
+        .then((res) => saveNames(this.dataDir, JSON.parse(gunzipSync(Buffer.from(res.data)).toString('utf8')), universe))
+        .then((names) => { if (names) { this.names = names; this.cache.del('snapshot'); } })
+        .catch((err) => logger.warn({ err: err.message }, 'NSE instrument names unavailable; showing symbols'));
+    }
+    return {};
+  }
+
+  // Shares one in-flight request per key and keeps the result for a market-hours-aware TTL.
+  // A failed or empty result is kept briefly so a down source is not hammered.
+  async _cached(key, load, ttl = { open: 60, closed: 600 }) {
+    const hit = this.cache.get(key);
+    if (hit !== undefined) return hit;
+    if (this.inflight.has(key)) return this.inflight.get(key);
+    const p = (async () => {
+      try {
+        const value = (await load()) ?? null;
+        this.cache.set(key, value, value === null ? 60 : isMarketOpen() ? ttl.open : ttl.closed);
+        return value;
+      } finally {
+        this.inflight.delete(key);
+      }
+    })();
+    this.inflight.set(key, p);
+    return p;
   }
 
   async getIndices() {
@@ -269,62 +356,30 @@ export class UpstoxProvider extends MarketDataProvider {
     ]);
   }
 
+  // Movers are ranked over the covered universe from the shared snapshot. With no snapshot
+  // (no feed and no saved candles) the lists are empty rather than built-in.
   async getGainers(limit = 20) {
-    const mockGainers = [
-      { symbol: 'NSE:TATAMOTORS', name: 'Tata Motors Ltd', ltp: 984.60, change: 38.40, changePercent: 4.06, volume: 24500000, high: 994.00, low: 951.20, fiftyTwoWeekHigh: 1179.00, fiftyTwoWeekLow: 600.50, sector: 'Automobiles & Mobility', marketCap: '₹3.62T' },
-      { symbol: 'NSE:INFY', name: 'Infosys Limited', ltp: 1942.20, change: 52.80, changePercent: 2.80, volume: 18200000, high: 1955.00, low: 1898.00, fiftyTwoWeekHigh: 1990.00, fiftyTwoWeekLow: 1358.00, sector: 'Technology & Software', marketCap: '₹8.05T' },
-      { symbol: 'NSE:RELIANCE', name: 'Reliance Industries Ltd', ltp: 2980.50, change: 65.10, changePercent: 2.23, volume: 14200000, high: 2995.00, low: 2922.00, fiftyTwoWeekHigh: 3217.90, fiftyTwoWeekLow: 2221.05, sector: 'Energy & Power', marketCap: '₹20.16T' },
-      { symbol: 'NSE:HDFCBANK', name: 'HDFC Bank Limited', ltp: 1675.00, change: 28.50, changePercent: 1.73, volume: 29400000, high: 1684.00, low: 1648.50, fiftyTwoWeekHigh: 1794.00, fiftyTwoWeekLow: 1363.45, sector: 'Banking & Financials', marketCap: '₹12.75T' },
-      { symbol: 'NSE:BHARTIARTL', name: 'Bharti Airtel Ltd', ltp: 1610.40, change: 26.20, changePercent: 1.65, volume: 11200000, high: 1622.00, low: 1585.00, fiftyTwoWeekHigh: 1690.00, fiftyTwoWeekLow: 890.00, sector: 'Telecom & Infrastructure', marketCap: '₹9.42T' },
-      { symbol: 'NSE:TCS', name: 'Tata Consultancy Services', ltp: 4290.00, change: 62.00, changePercent: 1.47, volume: 6800000, high: 4320.00, low: 4235.00, fiftyTwoWeekHigh: 4592.25, fiftyTwoWeekLow: 3311.00, sector: 'Technology & Software', marketCap: '₹15.52T' },
-      { symbol: 'NSE:ICICIBANK', name: 'ICICI Bank Ltd', ltp: 1228.30, change: 16.10, changePercent: 1.33, volume: 19800000, high: 1236.00, low: 1214.00, fiftyTwoWeekHigh: 1310.00, fiftyTwoWeekLow: 899.00, sector: 'Banking & Financials', marketCap: '₹8.65T' },
-      { symbol: 'NSE:LT', name: 'Larsen & Toubro Ltd', ltp: 3680.00, change: 44.50, changePercent: 1.22, volume: 5400000, high: 3705.00, low: 3640.00, fiftyTwoWeekHigh: 3919.90, fiftyTwoWeekLow: 2865.00, sector: 'Engineering & Infrastructure', marketCap: '₹5.06T' },
-      { symbol: 'NSE:MARUTI', name: 'Maruti Suzuki India', ltp: 12450.00, change: 140.00, changePercent: 1.14, volume: 1800000, high: 12520.00, low: 12310.00, fiftyTwoWeekHigh: 13680.00, fiftyTwoWeekLow: 9737.00, sector: 'Automobiles & Mobility', marketCap: '₹3.91T' },
-      { symbol: 'NSE:ITC', name: 'ITC Limited', ltp: 512.40, change: 5.20, changePercent: 1.03, volume: 16500000, high: 515.50, low: 507.00, fiftyTwoWeekHigh: 528.50, fiftyTwoWeekLow: 399.30, sector: 'Consumer Goods & FMCG', marketCap: '₹6.40T' },
-      { symbol: 'NSE:SBIN', name: 'State Bank of India', ltp: 796.20, change: 7.80, changePercent: 0.99, volume: 21300000, high: 802.00, low: 789.00, fiftyTwoWeekHigh: 912.00, fiftyTwoWeekLow: 555.20, sector: 'Banking & Financials', marketCap: '₹7.10T' },
-      { symbol: 'NSE:HCLTECH', name: 'HCL Technologies', ltp: 1680.00, change: 15.60, changePercent: 0.94, volume: 4900000, high: 1695.00, low: 1665.00, fiftyTwoWeekHigh: 1835.00, fiftyTwoWeekLow: 1205.00, sector: 'Technology & Software', marketCap: '₹4.56T' },
-      { symbol: 'NSE:NTPC', name: 'NTPC Limited', ltp: 385.00, change: 3.40, changePercent: 0.89, volume: 13500000, high: 388.50, low: 381.00, fiftyTwoWeekHigh: 425.00, fiftyTwoWeekLow: 228.00, sector: 'Energy & Power', marketCap: '₹3.73T' },
-      { symbol: 'NSE:M&M', name: 'Mahindra & Mahindra', ltp: 2850.00, change: 24.50, changePercent: 0.87, volume: 4100000, high: 2875.00, low: 2828.00, fiftyTwoWeekHigh: 3175.00, fiftyTwoWeekLow: 1475.00, sector: 'Automobiles & Mobility', marketCap: '₹3.54T' },
-      { symbol: 'NSE:WIPRO', name: 'Wipro Limited', ltp: 520.00, change: 3.10, changePercent: 0.60, volume: 8800000, high: 524.50, low: 516.00, fiftyTwoWeekHigh: 580.00, fiftyTwoWeekLow: 375.00, sector: 'Technology & Software', marketCap: '₹2.72T' },
-    ];
-    return markFallback(mockGainers.slice(0, limit));
+    const snap = await this.getSnapshot();
+    return snap ? movers(snap.stocks, 'gainers', limit) : [];
   }
 
   async getLosers(limit = 20) {
-    const mockLosers = [
-      { symbol: 'NSE:TATASTEEL', name: 'Tata Steel Ltd', ltp: 151.20, change: -4.80, changePercent: -3.08, volume: 32100000, high: 156.40, low: 150.80, fiftyTwoWeekHigh: 184.60, fiftyTwoWeekLow: 114.25, sector: 'Metals & Mining', marketCap: '₹1.88T' },
-      { symbol: 'NSE:HINDALCO', name: 'Hindalco Industries Ltd', ltp: 672.40, change: -18.20, changePercent: -2.64, volume: 14500000, high: 691.00, low: 669.50, fiftyTwoWeekHigh: 715.00, fiftyTwoWeekLow: 448.00, sector: 'Metals & Mining', marketCap: '₹1.51T' },
-      { symbol: 'NSE:SUNPHARMA', name: 'Sun Pharmaceutical Ltd', ltp: 1845.00, change: -36.50, changePercent: -1.94, volume: 8200000, high: 1888.00, low: 1838.00, fiftyTwoWeekHigh: 1960.00, fiftyTwoWeekLow: 1110.00, sector: 'Pharma & Healthcare', marketCap: '₹4.43T' },
-      { symbol: 'NSE:CIPLA', name: 'Cipla Limited', ltp: 1624.10, change: -27.30, changePercent: -1.65, volume: 6400000, high: 1655.00, low: 1618.00, fiftyTwoWeekHigh: 1702.00, fiftyTwoWeekLow: 1131.00, sector: 'Pharma & Healthcare', marketCap: '₹1.31T' },
-      { symbol: 'NSE:COALINDIA', name: 'Coal India Ltd', ltp: 488.50, change: -7.10, changePercent: -1.43, volume: 12800000, high: 497.00, low: 485.20, fiftyTwoWeekHigh: 527.40, fiftyTwoWeekLow: 275.00, sector: 'Energy & Power', marketCap: '₹3.01T' },
-      { symbol: 'NSE:JSWSTEEL', name: 'JSW Steel Ltd', ltp: 948.00, change: -13.20, changePercent: -1.37, volume: 9100000, high: 963.00, low: 944.00, fiftyTwoWeekHigh: 1040.00, fiftyTwoWeekLow: 737.00, sector: 'Metals & Mining', marketCap: '₹2.32T' },
-      { symbol: 'NSE:DRREDDY', name: "Dr. Reddy's Laboratories", ltp: 6620.00, change: -82.00, changePercent: -1.22, volume: 2400000, high: 6710.00, low: 6595.00, fiftyTwoWeekHigh: 7104.00, fiftyTwoWeekLow: 5212.00, sector: 'Pharma & Healthcare', marketCap: '₹1.10T' },
-      { symbol: 'NSE:ASIANPAINT', name: 'Asian Paints Ltd', ltp: 3180.00, change: -34.00, changePercent: -1.06, volume: 4300000, high: 3225.00, low: 3165.00, fiftyTwoWeekHigh: 3568.00, fiftyTwoWeekLow: 2766.00, sector: 'Consumer Goods & FMCG', marketCap: '₹3.05T' },
-      { symbol: 'NSE:KOTAKBANK', name: 'Kotak Mahindra Bank', ltp: 1780.00, change: -12.40, changePercent: -0.69, volume: 6200000, high: 1798.00, low: 1772.00, fiftyTwoWeekHigh: 1932.00, fiftyTwoWeekLow: 1544.00, sector: 'Banking & Financials', marketCap: '₹3.54T' },
-      { symbol: 'NSE:BAJFINANCE', name: 'Bajaj Finance', ltp: 6920.00, change: -45.00, changePercent: -0.65, volume: 3100000, high: 6990.00, low: 6890.00, fiftyTwoWeekHigh: 8190.00, fiftyTwoWeekLow: 6360.00, sector: 'Banking & Financials', marketCap: '₹4.28T' },
-      { symbol: 'NSE:ONGC', name: 'ONGC Limited', ltp: 295.40, change: -2.10, changePercent: -0.71, volume: 15600000, high: 299.00, low: 293.50, fiftyTwoWeekHigh: 344.00, fiftyTwoWeekLow: 179.00, sector: 'Energy & Power', marketCap: '₹3.72T' },
-      { symbol: 'NSE:TITAN', name: 'Titan Company Ltd', ltp: 3420.00, change: -22.00, changePercent: -0.64, volume: 2900000, high: 3450.00, low: 3405.00, fiftyTwoWeekHigh: 3886.95, fiftyTwoWeekLow: 3055.00, sector: 'Consumer Goods & FMCG', marketCap: '₹3.04T' },
-    ];
-    return markFallback(mockLosers.slice(0, limit));
+    const snap = await this.getSnapshot();
+    return snap ? movers(snap.stocks, 'losers', limit) : [];
   }
 
+  // Most active by traded value (volume × average traded price).
   async getActive(limit = 20) {
-    const mockActive = [
-      { symbol: 'NSE:TATASTEEL', name: 'Tata Steel Ltd', ltp: 151.20, change: -4.80, changePercent: -3.08, volume: 32100000, high: 156.40, low: 150.80, fiftyTwoWeekHigh: 184.60, fiftyTwoWeekLow: 114.25, sector: 'Metals & Mining', marketCap: '₹1.88T' },
-      { symbol: 'NSE:HDFCBANK', name: 'HDFC Bank Limited', ltp: 1675.00, change: 28.50, changePercent: 1.73, volume: 29400000, high: 1684.00, low: 1648.50, fiftyTwoWeekHigh: 1794.00, fiftyTwoWeekLow: 1363.45, sector: 'Banking & Financials', marketCap: '₹12.75T' },
-      { symbol: 'NSE:TATAMOTORS', name: 'Tata Motors Ltd', ltp: 984.60, change: 38.40, changePercent: 4.06, volume: 24500000, high: 994.00, low: 951.20, fiftyTwoWeekHigh: 1179.00, fiftyTwoWeekLow: 600.50, sector: 'Automobiles & Mobility', marketCap: '₹3.62T' },
-      { symbol: 'NSE:SBIN', name: 'State Bank of India', ltp: 796.20, change: 7.80, changePercent: 0.99, volume: 21300000, high: 802.00, low: 789.00, fiftyTwoWeekHigh: 912.00, fiftyTwoWeekLow: 555.20, sector: 'Banking & Financials', marketCap: '₹7.10T' },
-      { symbol: 'NSE:ICICIBANK', name: 'ICICI Bank Ltd', ltp: 1228.30, change: 16.10, changePercent: 1.33, volume: 19800000, high: 1236.00, low: 1214.00, fiftyTwoWeekHigh: 1310.00, fiftyTwoWeekLow: 899.00, sector: 'Banking & Financials', marketCap: '₹8.65T' },
-      { symbol: 'NSE:INFY', name: 'Infosys Limited', ltp: 1942.20, change: 52.80, changePercent: 2.80, volume: 18200000, high: 1955.00, low: 1898.00, fiftyTwoWeekHigh: 1990.00, fiftyTwoWeekLow: 1358.00, sector: 'Technology & Software', marketCap: '₹8.05T' },
-      { symbol: 'NSE:ITC', name: 'ITC Limited', ltp: 512.40, change: 5.20, changePercent: 1.03, volume: 16500000, high: 515.50, low: 507.00, fiftyTwoWeekHigh: 528.50, fiftyTwoWeekLow: 399.30, sector: 'Consumer Goods & FMCG', marketCap: '₹6.40T' },
-      { symbol: 'NSE:ONGC', name: 'ONGC Limited', ltp: 295.40, change: -2.10, changePercent: -0.71, volume: 15600000, high: 299.00, low: 293.50, fiftyTwoWeekHigh: 344.00, fiftyTwoWeekLow: 179.00, sector: 'Energy & Power', marketCap: '₹3.72T' },
-      { symbol: 'NSE:HINDALCO', name: 'Hindalco Industries Ltd', ltp: 672.40, change: -18.20, changePercent: -2.64, volume: 14500000, high: 691.00, low: 669.50, fiftyTwoWeekHigh: 715.00, fiftyTwoWeekLow: 448.00, sector: 'Metals & Mining', marketCap: '₹1.51T' },
-      { symbol: 'NSE:RELIANCE', name: 'Reliance Industries Ltd', ltp: 2980.50, change: 65.10, changePercent: 2.23, volume: 14200000, high: 2995.00, low: 2922.00, fiftyTwoWeekHigh: 3217.90, fiftyTwoWeekLow: 2221.05, sector: 'Energy & Power', marketCap: '₹20.16T' },
-      { symbol: 'NSE:NTPC', name: 'NTPC Limited', ltp: 385.00, change: 3.40, changePercent: 0.89, volume: 13500000, high: 388.50, low: 381.00, fiftyTwoWeekHigh: 425.00, fiftyTwoWeekLow: 228.00, sector: 'Energy & Power', marketCap: '₹3.73T' },
-      { symbol: 'NSE:COALINDIA', name: 'Coal India Ltd', ltp: 488.50, change: -7.10, changePercent: -1.43, volume: 12800000, high: 497.00, low: 485.20, fiftyTwoWeekHigh: 527.40, fiftyTwoWeekLow: 275.00, sector: 'Energy & Power', marketCap: '₹3.01T' },
-      { symbol: 'NSE:BHARTIARTL', name: 'Bharti Airtel Ltd', ltp: 1610.40, change: 26.20, changePercent: 1.65, volume: 11200000, high: 1622.00, low: 1585.00, fiftyTwoWeekHigh: 1690.00, fiftyTwoWeekLow: 890.00, sector: 'Telecom & Infrastructure', marketCap: '₹9.42T' },
-    ];
-    return markFallback(mockActive.slice(0, limit));
+    const snap = await this.getSnapshot();
+    return snap ? movers(snap.stocks, 'active', limit) : [];
+  }
+
+  // Every covered stock, for the screener and heatmap.
+  async getStocks() {
+    const snap = await this.getSnapshot();
+    return snap
+      ? { source: snap.source, asOf: snap.asOf, session: snap.session, stocks: snap.stocks }
+      : { source: SOURCE_UNAVAILABLE, asOf: null, session: null, stocks: [] };
   }
 
   async getQuote(symbol) {

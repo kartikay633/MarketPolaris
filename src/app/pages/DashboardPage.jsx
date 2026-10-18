@@ -2,7 +2,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
-import { useMarketOverview, useGainers, useLosers, useActive } from '../hooks/useMarketData';
+import { useMarketOverview, useGainers, useLosers, useActive, useMarketStocks } from '../hooks/useMarketData';
 import { useMarketNews } from '../hooks/useNews';
 import { usePortfolio, useAddFunds } from '../hooks/useTrade';
 import { useStockHistory } from '../hooks/useStockData';
@@ -12,7 +12,8 @@ import CompanyLogo from '../components/common/CompanyLogo';
 import AISummaryCard from '../components/ai/AISummaryCard';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorBoundary from '../components/common/ErrorBoundary';
-import { formatINR, formatNumber, formatVolume } from '../utils/formatters';
+import DataStamp from '../components/common/DataStamp';
+import { formatINR, formatNumber, formatVolume, formatCrore } from '../utils/formatters';
 import { TrendingUp, TrendingDown, Activity, Flame, RefreshCw } from 'lucide-react';
 
 const IST_OFFSET_S = 19800;
@@ -28,6 +29,38 @@ const istDay = (t) => new Date((t + IST_OFFSET_S) * 1000).toISOString().slice(0,
 const signed = (n, digits = 2) => `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n), digits)}`;
 const clampPct = (n) => Math.min(100, Math.max(0, n));
 const rangePos = (value, low, high) => (high > low ? clampPct(((value - low) / (high - low)) * 100) : 50);
+
+// Volatility regime read straight off India VIX; direction from breadth of the tracked universe.
+function vixRegime(vix) {
+  if (!Number.isFinite(vix)) return null;
+  if (vix < 13) return { short: 'Calm', word: 'Low volatility' };
+  if (vix < 18) return { short: 'Normal', word: 'Normal volatility' };
+  if (vix < 24) return { short: 'Elevated', word: 'Elevated volatility' };
+  return { short: 'Stressed', word: 'High volatility' };
+}
+
+function breadthTone(breadth) {
+  if (!breadth?.total) return null;
+  const adv = breadth.advancing / breadth.total;
+  const dec = breadth.declining / breadth.total;
+  if (adv >= 0.6) return 'broad advance';
+  if (dec >= 0.6) return 'broad decline';
+  return 'mixed breadth';
+}
+
+const formatDay = (ymd) => new Date(`${ymd}T12:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+function Unavailable({ title, children }) {
+  return (
+    <div className="fd-pane">
+      <div className="fd-lbl">{title}</div>
+      <div className="fd-unavailable">
+        <span>Unavailable right now</span>
+        <span style={{ fontSize: '12px', color: 'var(--text-dim)' }}>{children}</span>
+      </div>
+    </div>
+  );
+}
 
 // Builds the intraday trace for the most recent session in the candle history.
 function buildSessionTrace(candles, previousClose) {
@@ -83,6 +116,7 @@ export default function DashboardPage() {
   const { data: gainers = [], isLoading: isGainersLoading } = useGainers(15);
   const { data: losers = [], isLoading: isLosersLoading } = useLosers(15);
   const { data: active = [], isLoading: isActiveLoading } = useActive(15);
+  const { data: universe } = useMarketStocks();
   const { data: marketNews = [] } = useMarketNews('all', 6);
 
   // Live Simulated Capital Queries & Mutations
@@ -102,30 +136,17 @@ export default function DashboardPage() {
     setTimeout(() => setIsRefreshing(false), 1000);
   };
 
-  // Institutional data from overview or fallback
-  const institutionalFlows = overview?.institutionalFlows || {
-    fiiNet: 1842.60,
-    fiiBuy: 12410.20,
-    fiiSell: 10567.60,
-    diiNet: 2110.45,
-    diiBuy: 9820.50,
-    diiSell: 7710.05,
-    date: '19-Sep-2026',
-  };
+  // Each block is null when its source is unavailable; the pane then says so instead of guessing.
+  const institutionalFlows = overview?.institutionalFlows || null;
+  const turnover = overview?.turnover || null;
+  const derivatives = overview?.derivatives || null;
+  const sources = overview?.sources || {};
+  const asOf = overview?.asOf || {};
 
-  const turnover = overview?.turnover || {
-    nseCash: '₹42,180 Cr',
-    bseCash: '₹6,430 Cr',
-    totalCash: '₹48,610 Cr',
-    nseFo: '₹182.4 Lakh Cr',
-    totalTrades: '2.45 Cr',
-  };
-
-  // 52-week high breakout stocks (filtered from gainers/active near high)
-  const breakouts = gainers.filter(s => {
-    if (!s.fiftyTwoWeekHigh || !s.ltp) return false;
-    return (s.ltp / s.fiftyTwoWeekHigh) >= 0.90;
-  });
+  // Stocks that set a new 52-week high in the session (day high at the trailing 52-week high).
+  const breakouts = (universe?.stocks || [])
+    .filter((s) => s.fiftyTwoWeekHigh && s.high >= s.fiftyTwoWeekHigh)
+    .sort((a, b) => b.changePercent - a.changePercent);
 
   const indices = overview?.indices || [];
   const nifty = indices.find((i) => i.symbol === 'NIFTY_50') || indices[0];
@@ -137,11 +158,14 @@ export default function DashboardPage() {
 
   const isOpen = overview?.status === 'OPEN';
   const breadth = overview?.breadth;
-  const vixValue = vixIndex?.value ?? 12.85;
-  const vixChange = vixIndex?.changePercent ?? -3.16;
-  const pcr = overview?.derivatives?.pcr ?? 1.15;
-  const vixPos = clampPct(((vixValue - VIX_MIN) / (VIX_MAX - VIX_MIN)) * 100);
-  const totalInflow = institutionalFlows.fiiNet + institutionalFlows.diiNet;
+  const vixValue = vixIndex?.value;
+  const vixChange = vixIndex?.changePercent;
+  const hasVix = Number.isFinite(vixValue);
+  const vixPos = hasVix ? clampPct(((vixValue - VIX_MIN) / (VIX_MAX - VIX_MIN)) * 100) : 0;
+  const regime = vixRegime(vixValue);
+  const tone = breadthTone(breadth);
+  const totalInflow = institutionalFlows ? institutionalFlows.fiiNet + institutionalFlows.diiNet : null;
+  const moversSource = (gainers[0] || losers[0] || active[0]);
 
   const istTime = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZone: 'Asia/Kolkata' });
   const istDate = now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
@@ -153,7 +177,7 @@ export default function DashboardPage() {
     { id: 'gainers', label: 'Gainers', icon: TrendingUp, count: gainers.length },
     { id: 'losers', label: 'Losers', icon: TrendingDown, count: losers.length },
     { id: 'active', label: 'Most active', icon: Activity, count: active.length },
-    { id: 'breakouts', label: '52W breakouts', icon: Flame, count: breakouts.length },
+    { id: 'breakouts', label: '52W highs', icon: Flame, count: breakouts.length },
   ];
   const displayList =
     activeTab === 'gainers' ? gainers :
@@ -196,6 +220,7 @@ export default function DashboardPage() {
                     {Number.isFinite(nifty.previousClose) && (
                       <span style={{ color: 'var(--text-dim)' }}>PREV CLOSE {formatNumber(nifty.previousClose, 2)}</span>
                     )}
+                    <DataStamp source={nifty.source} asOf={nifty.asOf} isOpen={isOpen} />
                   </div>
                 )}
               </div>
@@ -207,14 +232,18 @@ export default function DashboardPage() {
                   <dt className="fd-lbl">Adv / Dec</dt>
                   <dd>{breadth ? <>{formatNumber(breadth.advancing, 0)} <span style={{ color: 'var(--border-strong)' }}>/</span> {formatNumber(breadth.declining, 0)}</> : '—'}</dd>
                 </div>
-                <div><dt className="fd-lbl">Regime</dt><dd>Risk normal</dd></div>
+                <div><dt className="fd-lbl">VIX regime</dt><dd>{regime ? regime.short : '—'}</dd></div>
                 <div>
                   <dt className="fd-lbl">FII net · ₹ Cr</dt>
-                  <dd style={{ color: institutionalFlows.fiiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.fiiNet)}</dd>
+                  {institutionalFlows
+                    ? <dd style={{ color: institutionalFlows.fiiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.fiiNet)}</dd>
+                    : <dd>—</dd>}
                 </div>
                 <div>
                   <dt className="fd-lbl">DII net · ₹ Cr</dt>
-                  <dd style={{ color: institutionalFlows.diiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.diiNet)}</dd>
+                  {institutionalFlows
+                    ? <dd style={{ color: institutionalFlows.diiNet >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(institutionalFlows.diiNet)}</dd>
+                    : <dd>—</dd>}
                 </div>
               </dl>
             </div>
@@ -313,63 +342,91 @@ export default function DashboardPage() {
             <div className="fd-section-head">
               <span className="fd-lbl fd-lbl--accent">01</span>
               <h2 className="fd-h2">Market state</h2>
-              <span className="fd-lbl">Flows · {institutionalFlows.date}</span>
+              <span className="fd-lbl">Turnover &amp; flows via NSE</span>
             </div>
             <div className="fd-panes fd-panes--3">
-              <div className="fd-pane">
-                <div className="fd-lbl">Cash turnover · NSE + BSE</div>
-                <div className="fd-big">{turnover.totalCash}</div>
-                <dl className="fd-dl">
-                  <dt>NSE cash</dt><dd>{turnover.nseCash}</dd>
-                  <dt>BSE cash</dt><dd>{turnover.bseCash}</dd>
-                  <dt>F&amp;O notional</dt><dd>{turnover.nseFo}</dd>
-                  <dt>Total trades</dt><dd>{turnover.totalTrades}</dd>
-                </dl>
-              </div>
-
-              <div className="fd-pane">
-                <div className="fd-pane-head">
-                  <span className="fd-lbl">Institutional flows · ₹ Cr</span>
-                  <span className="fd-lbl" style={{ color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>
-                    {totalInflow >= 0 ? 'Net buyers' : 'Net sellers'}
-                  </span>
-                </div>
-                <div className="fd-big" style={{ color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(totalInflow)}</div>
-                {[
-                  ['FII', institutionalFlows.fiiNet, institutionalFlows.fiiBuy, institutionalFlows.fiiSell],
-                  ['DII', institutionalFlows.diiNet, institutionalFlows.diiBuy, institutionalFlows.diiSell],
-                ].map(([label, net, buy, sell]) => (
-                  <div className="fd-flow" key={label}>
-                    <div className="fd-flow-head">
-                      <span>{label}</span>
-                      <span className="fd-num" style={{ fontFamily: 'var(--font-mono)', color: net >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(net)}</span>
-                    </div>
-                    <div className="fd-flow-bar" aria-hidden="true"><span style={{ flex: buy || 1 }} /><span style={{ flex: sell || 1 }} /></div>
-                    <div className="fd-flow-foot fd-num"><span>BUY {formatNumber(buy, 2)}</span><span>SELL {formatNumber(sell, 2)}</span></div>
+              {turnover ? (
+                <div className="fd-pane">
+                  <div className="fd-pane-head">
+                    <span className="fd-lbl">Cash turnover · NSE</span>
+                    <DataStamp source={sources.turnover} asOf={asOf.turnover} isOpen={isOpen} />
                   </div>
-                ))}
-              </div>
+                  <div className="fd-big">{formatCrore(turnover.nseCashCr)}</div>
+                  <dl className="fd-dl">
+                    <dt>Equity segment</dt><dd>{formatCrore(turnover.nseEquityCr)}</dd>
+                    <dt>F&amp;O notional</dt><dd>{formatCrore(turnover.nseFoNotionalCr)}</dd>
+                    <dt>F&amp;O premium</dt><dd>{formatCrore(turnover.nseFoPremiumCr)}</dd>
+                    <dt>Cash trades</dt><dd>{formatVolume(turnover.cashTrades)}</dd>
+                  </dl>
+                </div>
+              ) : (
+                <Unavailable title="Cash turnover · NSE">The NSE turnover report could not be reached.</Unavailable>
+              )}
+
+              {institutionalFlows ? (
+                <div className="fd-pane">
+                  <div className="fd-pane-head">
+                    <span className="fd-lbl">FII / DII cash flows · ₹ Cr</span>
+                    <DataStamp source={sources.institutionalFlows} asOf={asOf.institutionalFlows} isOpen={isOpen} />
+                  </div>
+                  <div className="fd-big" style={{ color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(totalInflow)}</div>
+                  <div className="fd-lbl" style={{ marginTop: '-4px', color: totalInflow >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>
+                    {totalInflow >= 0 ? 'Net buyers' : 'Net sellers'} · NSE provisional
+                  </div>
+                  {[
+                    ['FII / FPI', institutionalFlows.fiiNet, institutionalFlows.fiiBuy, institutionalFlows.fiiSell],
+                    ['DII', institutionalFlows.diiNet, institutionalFlows.diiBuy, institutionalFlows.diiSell],
+                  ].map(([label, net, buy, sell]) => (
+                    <div className="fd-flow" key={label}>
+                      <div className="fd-flow-head">
+                        <span>{label}</span>
+                        <span className="fd-num" style={{ fontFamily: 'var(--font-mono)', color: net >= 0 ? 'var(--positive-text)' : 'var(--negative-text)' }}>{signed(net)}</span>
+                      </div>
+                      <div className="fd-flow-bar" aria-hidden="true"><span style={{ flex: buy || 1 }} /><span style={{ flex: sell || 1 }} /></div>
+                      <div className="fd-flow-foot fd-num"><span>BUY {formatNumber(buy, 2)}</span><span>SELL {formatNumber(sell, 2)}</span></div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <Unavailable title="FII / DII cash flows · ₹ Cr">The NSE provisional FII/DII report could not be reached.</Unavailable>
+              )}
 
               <div className="fd-pane">
                 <div className="fd-pane-head">
                   <span className="fd-lbl">Volatility &amp; regime</span>
-                  <span className="fd-lbl fd-lbl--accent">Risk normal</span>
+                  {regime && <span className="fd-lbl fd-lbl--accent">VIX · {regime.short}</span>}
                 </div>
-                <div className="fd-regime-word">Low volatility,<br />bullish</div>
-                <div className="fd-scale" aria-label={`India VIX ${formatNumber(vixValue, 2)} on a ${VIX_MIN} to ${VIX_MAX} scale`}>
-                  <div className="fd-scale-track" aria-hidden="true">
-                    {Array.from({ length: 10 }, (_, k) => <span key={k} className={(k + 0.5) * 10 <= vixPos ? 'on' : ''} />)}
-                  </div>
-                  <span className="fd-scale-marker" style={{ left: `calc(${vixPos}% - 1px)` }} aria-hidden="true" />
-                  <div className="fd-scale-legend fd-lbl"><span>VIX {VIX_MIN} · calm</span><span>{VIX_MAX} · stressed</span></div>
-                </div>
+                {hasVix ? (
+                  <>
+                    <div className="fd-regime-word">{regime.word}{tone && <>,<br />{tone}</>}</div>
+                    <div className="fd-scale" aria-label={`India VIX ${formatNumber(vixValue, 2)} on a ${VIX_MIN} to ${VIX_MAX} scale`}>
+                      <div className="fd-scale-track" aria-hidden="true">
+                        {Array.from({ length: 10 }, (_, k) => <span key={k} className={(k + 0.5) * 10 <= vixPos ? 'on' : ''} />)}
+                      </div>
+                      <span className="fd-scale-marker" style={{ left: `calc(${vixPos}% - 1px)` }} aria-hidden="true" />
+                      <div className="fd-scale-legend fd-lbl"><span>VIX {VIX_MIN} · calm</span><span>{VIX_MAX} · stressed</span></div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="fd-unavailable" style={{ minHeight: '80px' }}>India VIX unavailable right now</div>
+                )}
                 <dl className="fd-dl">
-                  <dt>India VIX</dt>
-                  <dd>{formatNumber(vixValue, 2)} <span style={{ color: vixChange >= 0 ? 'var(--negative-text)' : 'var(--positive-text)' }}>{signed(vixChange)}%</span></dd>
-                  <dt>Put / call ratio</dt><dd>{formatNumber(pcr, 2)}</dd>
-                  {Number.isFinite(overview?.derivatives?.maxPain) && <><dt>Max pain</dt><dd>{formatNumber(overview.derivatives.maxPain, 0)}</dd></>}
-                  {Number.isFinite(overview?.derivatives?.atmIv) && <><dt>ATM IV</dt><dd>{formatNumber(overview.derivatives.atmIv, 1)}%</dd></>}
+                  {hasVix && <>
+                    <dt>India VIX</dt>
+                    <dd>{formatNumber(vixValue, 2)} <span style={{ color: vixChange >= 0 ? 'var(--negative-text)' : 'var(--positive-text)' }}>{signed(vixChange)}%</span></dd>
+                  </>}
+                  {derivatives ? <>
+                    <dt>NIFTY put / call (OI)</dt><dd>{formatNumber(derivatives.pcr, 2)}</dd>
+                    <dt>Max pain</dt><dd>{formatNumber(derivatives.maxPain, 0)}</dd>
+                    {Number.isFinite(derivatives.atmIv) && <><dt>ATM IV</dt><dd>{formatNumber(derivatives.atmIv, 1)}%</dd></>}
+                  </> : <><dt>NIFTY options</dt><dd style={{ color: 'var(--text-dim)' }}>Unavailable</dd></>}
                 </dl>
+                {derivatives && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', marginTop: '10px' }}>
+                    <span className="fd-lbl">Expiry {formatDay(derivatives.expiry)}</span>
+                    <DataStamp source={sources.derivatives} asOf={asOf.derivatives} isOpen={isOpen} />
+                  </div>
+                )}
               </div>
             </div>
           </section>
@@ -382,8 +439,12 @@ export default function DashboardPage() {
               <Link to="/markets" className="fd-link-lbl">Sector heatmap →</Link>
             </div>
             <div className="fd-panes fd-panes--2">
-              {breadth ? <MarketBreadthBar breadth={breadth} /> : <div className="fd-pane fd-empty">Breadth loads with the market overview.</div>}
-              {overview?.sectors?.length ? <SectorBar sectors={overview.sectors} /> : <div className="fd-pane fd-empty">Sector data loads with the market overview.</div>}
+              {breadth
+                ? <MarketBreadthBar breadth={breadth} stamp={<DataStamp source={sources.breadth} asOf={asOf.breadth} isOpen={isOpen} />} />
+                : <div className="fd-pane fd-empty">{isOverviewLoading ? 'Breadth loads with the market overview.' : 'Breadth unavailable right now.'}</div>}
+              {overview?.sectors?.length
+                ? <SectorBar sectors={overview.sectors} stamp={<DataStamp source={sources.sectors} asOf={asOf.sectors} isOpen={isOpen} />} />
+                : <div className="fd-pane fd-empty">{isOverviewLoading ? 'Sector data loads with the market overview.' : 'Sector indices unavailable right now.'}</div>}
             </div>
           </section>
 
@@ -407,6 +468,7 @@ export default function DashboardPage() {
                   </button>
                 ))}
               </div>
+              {moversSource && <DataStamp source={moversSource.source} asOf={moversSource.asOf} isOpen={isOpen} />}
               <Link to="/markets" className="fd-link-lbl">Full screener →</Link>
             </div>
 
@@ -418,7 +480,7 @@ export default function DashboardPage() {
                     <th className="r">LTP</th>
                     <th className="r">Change</th>
                     <th>Day range</th>
-                    <th className="r">Volume</th>
+                    <th className="r">{activeTab === 'active' ? 'Traded value' : 'Volume'}</th>
                     <th className="r">Action</th>
                   </tr>
                 </thead>
@@ -430,8 +492,8 @@ export default function DashboardPage() {
                   ) : (
                     displayList.slice(0, 10).map((s) => {
                       const isPositive = s.change >= 0;
-                      const low = s.low || (s.ltp * 0.98);
-                      const high = s.high || (s.ltp * 1.02);
+                      const low = s.low;
+                      const high = s.high;
                       const progressPct = rangePos(s.ltp, low, high);
                       return (
                         <tr key={s.symbol} className="stock-table-row" onClick={() => navigate(`/stocks/${encodeURIComponent(s.symbol)}`)}>
@@ -440,7 +502,7 @@ export default function DashboardPage() {
                               <CompanyLogo symbol={s.symbol} name={s.name} size={32} />
                               <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                                 <span style={{ fontWeight: 500 }}>{s.symbol.replace('NSE:', '').replace('BSE:', '')}</span>
-                                <span style={{ fontSize: '12px', color: 'var(--text-dim)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{s.name}</span>
+                                <span style={{ fontSize: '12px', color: 'var(--text-dim)', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name !== s.symbol.replace('NSE:', '') ? s.name : s.sector}</span>
                               </div>
                             </div>
                           </td>
@@ -455,7 +517,9 @@ export default function DashboardPage() {
                               <span>{formatNumber(high, 2)}</span>
                             </div>
                           </td>
-                          <td className="r mono" style={{ color: 'var(--text-secondary)' }}>{formatVolume(s.volume || 1000000)}</td>
+                          <td className="r mono" style={{ color: 'var(--text-secondary)' }}>
+                            {activeTab === 'active' ? formatCrore(s.tradedValue / 1e7) : formatVolume(s.volume)}
+                          </td>
                           <td className="r">
                             <button
                               type="button"
@@ -517,7 +581,7 @@ export default function DashboardPage() {
           </section>
 
           <footer className="fd-foot fd-lbl">
-            <span>Quotes NSE · BSE via Upstox &nbsp;/&nbsp; News via Marketaux</span>
+            <span>Quotes &amp; NIFTY options via Upstox &nbsp;/&nbsp; Turnover &amp; FII/DII via NSE &nbsp;/&nbsp; News via Marketaux</span>
             <span>Paper trading only · Not investment advice</span>
           </footer>
         </div>

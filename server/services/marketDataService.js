@@ -69,6 +69,16 @@ export class MarketDataService {
     return data;
   }
 
+  async getStocks() {
+    const cacheKey = 'market:stocks';
+    const cached = cache.get(cacheKey);
+    if (cached) return cached;
+
+    const data = await this.provider.getStocks();
+    cache.set(cacheKey, data, this._getTTL(30, 300));
+    return data;
+  }
+
   async getQuote(symbol) {
     const cacheKey = `stock:quote:${symbol.toUpperCase()}`;
     const cached = cache.get(cacheKey);

@@ -1,102 +1,80 @@
-// ROADMAP: Section 2, 5 & Design Refinement — Institutional Equities Screener & Market Structure Workstation
+// ROADMAP: Section 2, 5 & Design Refinement — Equities Screener & Market Structure Workstation
+// Rows are the covered research universe priced by /api/market/stocks (live Upstox quotes or the
+// latest saved end-of-day candles); the derivatives banner reads the NIFTY option chain.
 import React, { useState, useMemo } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useMarketOverview, useGainers, useLosers, useActive } from '../hooks/useMarketData';
+import { useNavigate } from 'react-router-dom';
+import { useMarketOverview, useMarketStocks } from '../hooks/useMarketData';
 import MarketHeatmap from '../components/market/MarketHeatmap';
 import CompanyLogo from '../components/common/CompanyLogo';
-import { CardSkeleton, TableSkeleton } from '../components/common/LoadingSkeleton';
+import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorBoundary from '../components/common/ErrorBoundary';
-import { formatINR, formatIndianNumber } from '../utils/formatters';
+import DataStamp from '../components/common/DataStamp';
+import { formatINR, formatIndianNumber, formatCrore } from '../utils/formatters';
 import {
   Search,
   SlidersHorizontal,
   Layers,
-  BarChart3,
   TrendingUp,
   TrendingDown,
   Activity,
   Flame,
-  ShieldAlert,
   ArrowUpDown,
-  Zap,
-  ChevronDown,
-  Info,
-  ExternalLink,
 } from 'lucide-react';
 
-// Comprehensive Indian Equities Universe with Multi-Factor Attributes
-const EQUITIES_UNIVERSE = [
-  { symbol: 'NSE:RELIANCE', name: 'Reliance Industries Ltd', ltp: 2980.50, change: 65.10, changePercent: 2.23, high: 2995.00, low: 2922.00, fiftyTwoWeekHigh: 3217.90, fiftyTwoWeekLow: 2221.05, volume: 14200000, marketCap: '₹20.16T', sector: 'Energy & Power', pe: 28.4, beta: 1.12 },
-  { symbol: 'NSE:TCS', name: 'Tata Consultancy Services', ltp: 4290.00, change: 62.00, changePercent: 1.47, high: 4320.00, low: 4235.00, fiftyTwoWeekHigh: 4592.25, fiftyTwoWeekLow: 3311.00, volume: 6800000, marketCap: '₹15.52T', sector: 'Technology & Software', pe: 31.8, beta: 0.85 },
-  { symbol: 'NSE:HDFCBANK', name: 'HDFC Bank Limited', ltp: 1675.00, change: 28.50, changePercent: 1.73, high: 1684.00, low: 1648.50, fiftyTwoWeekHigh: 1794.00, fiftyTwoWeekLow: 1363.45, volume: 29400000, marketCap: '₹12.75T', sector: 'Banking & Financials', pe: 19.5, beta: 1.08 },
-  { symbol: 'NSE:BHARTIARTL', name: 'Bharti Airtel Ltd', ltp: 1610.40, change: 26.20, changePercent: 1.65, high: 1622.00, low: 1585.00, fiftyTwoWeekHigh: 1690.00, fiftyTwoWeekLow: 890.00, volume: 11200000, marketCap: '₹9.42T', sector: 'Telecom & Infrastructure', pe: 54.2, beta: 0.92 },
-  { symbol: 'NSE:ICICIBANK', name: 'ICICI Bank Ltd', ltp: 1228.30, change: 16.10, changePercent: 1.33, high: 1236.00, low: 1214.00, fiftyTwoWeekHigh: 1310.00, fiftyTwoWeekLow: 899.00, volume: 19800000, marketCap: '₹8.65T', sector: 'Banking & Financials', pe: 18.2, beta: 1.15 },
-  { symbol: 'NSE:INFY', name: 'Infosys Limited', ltp: 1942.20, change: 52.80, changePercent: 2.80, high: 1955.00, low: 1898.00, fiftyTwoWeekHigh: 1990.00, fiftyTwoWeekLow: 1358.00, volume: 18200000, marketCap: '₹8.05T', sector: 'Technology & Software', pe: 29.6, beta: 1.04 },
-  { symbol: 'NSE:SBIN', name: 'State Bank of India', ltp: 796.20, change: 7.80, changePercent: 0.99, high: 802.00, low: 789.00, fiftyTwoWeekHigh: 912.00, fiftyTwoWeekLow: 555.20, volume: 21300000, marketCap: '₹7.10T', sector: 'Banking & Financials', pe: 10.4, beta: 1.28 },
-  { symbol: 'NSE:ITC', name: 'ITC Limited', ltp: 512.40, change: 5.20, changePercent: 1.03, high: 515.50, low: 507.00, fiftyTwoWeekHigh: 528.50, fiftyTwoWeekLow: 399.30, volume: 16500000, marketCap: '₹6.40T', sector: 'Consumer Goods & FMCG', pe: 27.5, beta: 0.65 },
-  { symbol: 'NSE:LT', name: 'Larsen & Toubro Ltd', ltp: 3680.00, change: 44.50, changePercent: 1.22, high: 3705.00, low: 3640.00, fiftyTwoWeekHigh: 3919.90, fiftyTwoWeekLow: 2865.00, volume: 5400000, marketCap: '₹5.06T', sector: 'Engineering & Infrastructure', pe: 34.1, beta: 1.18 },
-  { symbol: 'NSE:HCLTECH', name: 'HCL Technologies', ltp: 1680.00, change: 15.60, changePercent: 0.94, high: 1695.00, low: 1665.00, fiftyTwoWeekHigh: 1835.00, fiftyTwoWeekLow: 1205.00, volume: 4900000, marketCap: '₹4.56T', sector: 'Technology & Software', pe: 26.8, beta: 0.88 },
-  { symbol: 'NSE:SUNPHARMA', name: 'Sun Pharmaceutical Ltd', ltp: 1845.00, change: -36.50, changePercent: -1.94, high: 1888.00, low: 1838.00, fiftyTwoWeekHigh: 1960.00, fiftyTwoWeekLow: 1110.00, volume: 8200000, marketCap: '₹4.43T', sector: 'Pharma & Healthcare', pe: 38.5, beta: 0.74 },
-  { symbol: 'NSE:BAJFINANCE', name: 'Bajaj Finance', ltp: 6920.00, change: -45.00, changePercent: -0.65, high: 6990.00, low: 6890.00, fiftyTwoWeekHigh: 8190.00, fiftyTwoWeekLow: 6360.00, volume: 3100000, marketCap: '₹4.28T', sector: 'Banking & Financials', pe: 29.4, beta: 1.35 },
-  { symbol: 'NSE:MARUTI', name: 'Maruti Suzuki India', ltp: 12450.00, change: 140.00, changePercent: 1.14, high: 12520.00, low: 12310.00, fiftyTwoWeekHigh: 13680.00, fiftyTwoWeekLow: 9737.00, volume: 1800000, marketCap: '₹3.91T', sector: 'Automobiles & Mobility', pe: 28.2, beta: 0.96 },
-  { symbol: 'NSE:NTPC', name: 'NTPC Limited', ltp: 385.00, change: 3.40, changePercent: 0.89, high: 388.50, low: 381.00, fiftyTwoWeekHigh: 425.00, fiftyTwoWeekLow: 228.00, volume: 13500000, marketCap: '₹3.73T', sector: 'Energy & Power', pe: 16.5, beta: 1.05 },
-  { symbol: 'NSE:ONGC', name: 'ONGC Limited', ltp: 295.40, change: -2.10, changePercent: -0.71, high: 299.00, low: 293.50, fiftyTwoWeekHigh: 344.00, fiftyTwoWeekLow: 179.00, volume: 15600000, marketCap: '₹3.72T', sector: 'Energy & Power', pe: 8.4, beta: 1.22 },
-  { symbol: 'NSE:TATAMOTORS', name: 'Tata Motors Ltd', ltp: 984.60, change: 38.40, changePercent: 4.06, high: 994.00, low: 951.20, fiftyTwoWeekHigh: 1179.00, fiftyTwoWeekLow: 600.50, volume: 24500000, marketCap: '₹3.62T', sector: 'Automobiles & Mobility', pe: 16.2, beta: 1.42 },
-  { symbol: 'NSE:KOTAKBANK', name: 'Kotak Mahindra Bank', ltp: 1780.00, change: -12.40, changePercent: -0.69, high: 1798.00, low: 1772.00, fiftyTwoWeekHigh: 1932.00, fiftyTwoWeekLow: 1544.00, volume: 6200000, marketCap: '₹3.54T', sector: 'Banking & Financials', pe: 21.0, beta: 1.02 },
-  { symbol: 'NSE:M&M', name: 'Mahindra & Mahindra', ltp: 2850.00, change: 24.50, changePercent: 0.87, high: 2875.00, low: 2828.00, fiftyTwoWeekHigh: 3175.00, fiftyTwoWeekLow: 1475.00, volume: 4100000, marketCap: '₹3.54T', sector: 'Automobiles & Mobility', pe: 27.6, beta: 1.18 },
-  { symbol: 'NSE:ASIANPAINT', name: 'Asian Paints Ltd', ltp: 3180.00, change: -34.00, changePercent: -1.06, high: 3225.00, low: 3165.00, fiftyTwoWeekHigh: 3568.00, fiftyTwoWeekLow: 2766.00, volume: 4300000, marketCap: '₹3.05T', sector: 'Consumer Goods & FMCG', pe: 52.4, beta: 0.82 },
-  { symbol: 'NSE:TITAN', name: 'Titan Company Ltd', ltp: 3420.00, change: -22.00, changePercent: -0.64, high: 3450.00, low: 3405.00, fiftyTwoWeekHigh: 3886.95, fiftyTwoWeekLow: 3055.00, volume: 2900000, marketCap: '₹3.04T', sector: 'Consumer Goods & FMCG', pe: 82.1, beta: 0.95 },
-  { symbol: 'NSE:COALINDIA', name: 'Coal India Ltd', ltp: 488.50, change: -7.10, changePercent: -1.43, high: 497.00, low: 485.20, fiftyTwoWeekHigh: 527.40, fiftyTwoWeekLow: 275.00, volume: 12800000, marketCap: '₹3.01T', sector: 'Energy & Power', pe: 8.1, beta: 1.14 },
-  { symbol: 'NSE:WIPRO', name: 'Wipro Limited', ltp: 520.00, change: 3.10, changePercent: 0.60, high: 524.50, low: 516.00, fiftyTwoWeekHigh: 580.00, fiftyTwoWeekLow: 375.00, volume: 8800000, marketCap: '₹2.72T', sector: 'Technology & Software', pe: 23.4, beta: 0.89 },
-  { symbol: 'NSE:JSWSTEEL', name: 'JSW Steel Ltd', ltp: 948.00, change: -13.20, changePercent: -1.37, high: 963.00, low: 944.00, fiftyTwoWeekHigh: 1040.00, fiftyTwoWeekLow: 737.00, volume: 9100000, marketCap: '₹2.32T', sector: 'Metals & Mining', pe: 25.1, beta: 1.34 },
-  { symbol: 'NSE:TATASTEEL', name: 'Tata Steel Ltd', ltp: 151.20, change: -4.80, changePercent: -3.08, high: 156.40, low: 150.80, fiftyTwoWeekHigh: 184.60, fiftyTwoWeekLow: 114.25, volume: 32100000, marketCap: '₹1.88T', sector: 'Metals & Mining', pe: 42.0, beta: 1.55 },
-  { symbol: 'NSE:HINDALCO', name: 'Hindalco Industries Ltd', ltp: 672.40, change: -18.20, changePercent: -2.64, high: 691.00, low: 669.50, fiftyTwoWeekHigh: 715.00, fiftyTwoWeekLow: 448.00, volume: 14500000, marketCap: '₹1.51T', sector: 'Metals & Mining', pe: 15.8, beta: 1.48 },
-  { symbol: 'NSE:CIPLA', name: 'Cipla Limited', ltp: 1624.10, change: -27.30, changePercent: -1.65, high: 1655.00, low: 1618.00, fiftyTwoWeekHigh: 1702.00, fiftyTwoWeekLow: 1131.00, volume: 6400000, marketCap: '₹1.31T', sector: 'Pharma & Healthcare', pe: 28.9, beta: 0.68 },
-  { symbol: 'NSE:DRREDDY', name: "Dr. Reddy's Laboratories", ltp: 6620.00, change: -82.00, changePercent: -1.22, high: 6710.00, low: 6595.00, fiftyTwoWeekHigh: 7104.00, fiftyTwoWeekLow: 5212.00, volume: 2400000, marketCap: '₹1.10T', sector: 'Pharma & Healthcare', pe: 20.4, beta: 0.72 },
-];
+const ALL_SECTORS = 'All Sectors';
+const TOP_TRADED = 25;
 
-const SECTOR_OPTIONS = [
-  'All Sectors',
-  'Banking & Financials',
-  'Technology & Software',
-  'Energy & Power',
-  'Automobiles & Mobility',
-  'Consumer Goods & FMCG',
-  'Pharma & Healthcare',
-  'Metals & Mining',
-  'Telecom & Infrastructure',
-  'Engineering & Infrastructure',
-];
+const formatDay = (ymd) => new Date(`${ymd}T12:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }).toUpperCase();
+const formatOi = (n) => (n >= 1e7 ? `${(n / 1e7).toFixed(2)} Cr` : `${(n / 1e5).toFixed(2)} L`);
+
+// Open-interest PCR read as positioning, not a forecast.
+function pcrTone(pcr) {
+  if (pcr >= 1.2) return { label: 'PUT-HEAVY', badge: 'badge--positive', note: 'More put than call open interest' };
+  if (pcr <= 0.8) return { label: 'CALL-HEAVY', badge: 'badge--negative', note: 'More call than put open interest' };
+  return { label: 'BALANCED', badge: 'badge--neutral', note: 'Put and call open interest roughly even' };
+}
+
+function DerivativeCell({ label, children, note }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+      <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+        {label}
+      </span>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>{children}</div>
+      <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{note}</span>
+    </div>
+  );
+}
 
 export default function MarketsPage() {
   const navigate = useNavigate();
-  const { data: overview, isLoading: isOverviewLoading } = useMarketOverview();
-  
+  const { data: overview } = useMarketOverview();
+  const { data: snapshot, isLoading: isStocksLoading } = useMarketStocks();
+  const isOpen = overview?.status === 'OPEN';
+
   // Tab view: 'screener' vs 'treemap'
   const [viewMode, setViewMode] = useState('screener');
 
   // Screener filter states
   const [filterPreset, setFilterPreset] = useState('all');
-  const [selectedSector, setSelectedSector] = useState('All Sectors');
+  const [selectedSector, setSelectedSector] = useState(ALL_SECTORS);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('changePercent');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  // Derivatives metrics from overview or fallback
-  const derivatives = overview?.derivatives || {
-    pcr: 1.15,
-    maxPain: 23300,
-    atmIv: 12.4,
-    callWall: 23500,
-    putWall: 23200,
-    sentiment: 'Bullish (PCR > 1.0)',
-  };
+  const derivatives = overview?.derivatives || null;
+  const stocks = useMemo(() => snapshot?.stocks || [], [snapshot]);
+  const sectorOptions = useMemo(() => [ALL_SECTORS, ...[...new Set(stocks.map((s) => s.sector))].sort()], [stocks]);
+  const topTraded = useMemo(
+    () => new Set([...stocks].sort((a, b) => b.tradedValue - a.tradedValue).slice(0, TOP_TRADED).map((s) => s.symbol)),
+    [stocks],
+  );
 
   // Filtered & Sorted equities universe
   const filteredStocks = useMemo(() => {
-    return EQUITIES_UNIVERSE.filter((stock) => {
+    return stocks.filter((stock) => {
       // Sector filter
-      if (selectedSector !== 'All Sectors' && stock.sector !== selectedSector) {
+      if (selectedSector !== ALL_SECTORS && stock.sector !== selectedSector) {
         return false;
       }
 
@@ -116,36 +94,23 @@ export default function MarketsPage() {
         return stock.changePercent < 0;
       }
       if (filterPreset === 'breakouts') {
-        // within 6% of 52W high
-        return (stock.ltp / stock.fiftyTwoWeekHigh) >= 0.94;
+        // within 5% of the trailing 52-week high
+        return stock.fiftyTwoWeekHigh > 0 && (stock.ltp / stock.fiftyTwoWeekHigh) >= 0.95;
       }
       if (filterPreset === 'volume') {
-        return stock.volume >= 15000000;
-      }
-      if (filterPreset === 'momentum') {
-        return Math.abs(stock.changePercent) >= 1.5 || stock.beta >= 1.2;
-      }
-      if (filterPreset === 'value') {
-        return stock.pe <= 22;
+        return topTraded.has(stock.symbol);
       }
 
       return true;
     }).sort((a, b) => {
-      let valA = a[sortBy];
-      let valB = b[sortBy];
-
-      if (sortBy === 'marketCap') {
-        // parse trillion
-        valA = parseFloat(a.marketCap.replace('₹', '').replace('T', ''));
-        valB = parseFloat(b.marketCap.replace('₹', '').replace('T', ''));
-      }
-
+      const valA = a[sortBy];
+      const valB = b[sortBy];
       if (sortOrder === 'asc') {
         return valA > valB ? 1 : -1;
       }
       return valA < valB ? 1 : -1;
     });
-  }, [filterPreset, selectedSector, searchQuery, sortBy, sortOrder]);
+  }, [stocks, topTraded, filterPreset, selectedSector, searchQuery, sortBy, sortOrder]);
 
   const handleSort = (column) => {
     if (sortBy === column) {
@@ -169,7 +134,7 @@ export default function MarketsPage() {
               </span>
             </div>
             <p className="page-subtitle">
-              Multi-factor stock screening, derivatives PCR &amp; Max Pain telemetry, and dynamic equity treemap
+              {stocks.length ? `${stocks.length} tracked NSE large & mid caps` : 'Tracked NSE large & mid caps'}, NIFTY option-chain read-outs and a sector heatmap
             </p>
           </div>
 
@@ -196,8 +161,8 @@ export default function MarketsPage() {
           </div>
         </div>
 
-        {/* Derivatives & Market Structure Radar Banner */}
-        <div 
+        {/* Derivatives & Market Structure Radar Banner — NIFTY option chain, nearest expiry */}
+        <div
           className="card card-padded"
           style={{
             display: 'grid',
@@ -208,73 +173,51 @@ export default function MarketsPage() {
             boxShadow: 'none',
           }}
         >
-          {/* NIFTY PCR */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              NIFTY Put-Call Ratio (PCR)
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)' }}>
-                {derivatives.pcr}
-              </span>
-              <span className="badge badge--positive" style={{ fontSize: '9.5px', padding: '1px 6px' }}>BULLISH BIAS</span>
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Support accumulation zone</span>
-          </div>
+          {derivatives ? (() => {
+            const tone = pcrTone(derivatives.pcr);
+            return (
+              <>
+                <DerivativeCell label="NIFTY Put-Call Ratio (OI)" note={tone.note}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                    {derivatives.pcr.toFixed(2)}
+                  </span>
+                  <span className={`badge ${tone.badge}`} style={{ fontSize: '9.5px', padding: '1px 6px' }}>{tone.label}</span>
+                </DerivativeCell>
 
-          {/* Max Pain Strike */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              Expiry Max Pain Strike
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-bright)', fontFamily: 'var(--font-mono)' }}>
-                {formatIndianNumber(derivatives.maxPain)}
-              </span>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>25-SEP</span>
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>F&amp;O Pinning Target</span>
-          </div>
+                <DerivativeCell label="Expiry Max Pain Strike" note="Strike with the least option-holder payout">
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--accent-bright)', fontFamily: 'var(--font-mono)' }}>
+                    {formatIndianNumber(derivatives.maxPain, 0)}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{formatDay(derivatives.expiry)}</span>
+                </DerivativeCell>
 
-          {/* Major Call Wall (Resistance) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              Call Resistance Wall
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--negative)', fontFamily: 'var(--font-mono)' }}>
-                {formatIndianNumber(derivatives.callWall)} CE
-              </span>
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>1.20 Cr Open Interest</span>
-          </div>
+                <DerivativeCell label="Largest Call OI" note={`${formatOi(derivatives.callWallOi)} open interest`}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--negative)', fontFamily: 'var(--font-mono)' }}>
+                    {formatIndianNumber(derivatives.callWall, 0)} CE
+                  </span>
+                </DerivativeCell>
 
-          {/* Major Put Wall (Support) */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              Put Support Wall
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)' }}>
-                {formatIndianNumber(derivatives.putWall)} PE
-              </span>
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>1.45 Cr Open Interest</span>
-          </div>
+                <DerivativeCell label="Largest Put OI" note={`${formatOi(derivatives.putWallOi)} open interest`}>
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--positive)', fontFamily: 'var(--font-mono)' }}>
+                    {formatIndianNumber(derivatives.putWall, 0)} PE
+                  </span>
+                </DerivativeCell>
 
-          {/* ATM Implied Volatility */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-              ATM Implied Volatility (IV)
-            </span>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-              <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
-                {derivatives.atmIv}%
-              </span>
-              <span className="badge badge--neutral" style={{ fontSize: '9.5px', padding: '1px 6px' }}>MODERATE</span>
-            </div>
-            <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>Standard Options Premium</span>
-          </div>
+                <DerivativeCell
+                  label="ATM Implied Volatility"
+                  note={<>{formatIndianNumber(derivatives.atmStrike, 0)} strike · <DataStamp source={overview?.sources?.derivatives} asOf={overview?.asOf?.derivatives} isOpen={isOpen} /></>}
+                >
+                  <span style={{ fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
+                    {Number.isFinite(derivatives.atmIv) ? `${derivatives.atmIv.toFixed(1)}%` : '—'}
+                  </span>
+                </DerivativeCell>
+              </>
+            );
+          })() : (
+            <DerivativeCell label="NIFTY option chain" note="PCR, max pain, open-interest walls and ATM IV appear when the Upstox option chain is reachable.">
+              <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-muted)' }}>Unavailable right now</span>
+            </DerivativeCell>
+          )}
         </div>
 
         {/* VIEW 1: Institutional Quantitative Stock Screener */}
@@ -291,7 +234,7 @@ export default function MarketsPage() {
                     onClick={() => setFilterPreset('all')}
                     className={`tab-pill${filterPreset === 'all' ? ' tab-pill--active' : ''}`}
                   >
-                    All Equities ({EQUITIES_UNIVERSE.length})
+                    All Equities ({stocks.length})
                   </button>
                   <button
                     type="button"
@@ -315,7 +258,7 @@ export default function MarketsPage() {
                     className={`tab-pill${filterPreset === 'breakouts' ? ' tab-pill--active' : ''}`}
                   >
                     <Flame size={12} />
-                    <span>52W Breakouts</span>
+                    <span>Near 52W High</span>
                   </button>
                   <button
                     type="button"
@@ -323,15 +266,7 @@ export default function MarketsPage() {
                     className={`tab-pill${filterPreset === 'volume' ? ' tab-pill--accent' : ''}`}
                   >
                     <Activity size={12} />
-                    <span>Volume Heavy</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterPreset('momentum')}
-                    className={`tab-pill${filterPreset === 'momentum' ? ' tab-pill--active' : ''}`}
-                  >
-                    <Zap size={12} />
-                    <span>High Beta</span>
+                    <span>Top {TOP_TRADED} by Value</span>
                   </button>
                 </div>
 
@@ -366,14 +301,15 @@ export default function MarketsPage() {
                       cursor: 'pointer',
                     }}
                   >
-                    {SECTOR_OPTIONS.map((sec) => (
+                    {sectorOptions.map((sec) => (
                       <option key={sec} value={sec}>{sec}</option>
                     ))}
                   </select>
                 </div>
 
-                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                  Showing <strong style={{ color: 'var(--text-primary)' }}>{filteredStocks.length}</strong> matching institutional equities
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <span>Showing <strong style={{ color: 'var(--text-primary)' }}>{filteredStocks.length}</strong> of {stocks.length} tracked stocks</span>
+                  <DataStamp source={snapshot?.source} asOf={snapshot?.asOf} isOpen={isOpen} />
                 </div>
               </div>
             </div>
@@ -387,10 +323,10 @@ export default function MarketsPage() {
                     <th style={{ padding: '10px 12px', fontWeight: 600 }}>Sector</th>
                     <th 
                       style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => handleSort('marketCap')}
+                      onClick={() => handleSort('tradedValue')}
                     >
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <span>M-Cap</span>
+                        <span>Traded Value</span>
                         <ArrowUpDown size={11} />
                       </div>
                     </th>
@@ -408,7 +344,7 @@ export default function MarketsPage() {
                       onClick={() => handleSort('changePercent')}
                     >
                       <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                        <span>24h Change</span>
+                        <span>Day Change</span>
                         <ArrowUpDown size={11} />
                       </div>
                     </th>
@@ -427,7 +363,15 @@ export default function MarketsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredStocks.length === 0 ? (
+                  {isStocksLoading ? (
+                    <tr><td colSpan={9} style={{ padding: '20px' }}><TableSkeleton rows={8} /></td></tr>
+                  ) : !stocks.length ? (
+                    <tr>
+                      <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
+                        Market data is unavailable right now: no live feed and no saved end-of-day prices.
+                      </td>
+                    </tr>
+                  ) : filteredStocks.length === 0 ? (
                     <tr>
                       <td colSpan={9} style={{ textAlign: 'center', padding: '30px', color: 'var(--text-muted)' }}>
                         No instruments match the selected screener criteria. Try broadening your filter.
@@ -464,8 +408,8 @@ export default function MarketsPage() {
                                 <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: '13px' }}>
                                   {s.symbol.replace('NSE:', '')}
                                 </span>
-                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                  {s.name}
+                                <span style={{ fontSize: '11px', color: 'var(--text-muted)', whiteSpace: 'nowrap', maxWidth: '160px', overflow: 'hidden', textOverflow: 'ellipsis' }} title={s.name}>
+                                  {s.name !== s.symbol.replace('NSE:', '') ? s.name : ''}
                                 </span>
                               </div>
                             </div>
@@ -488,9 +432,12 @@ export default function MarketsPage() {
                             </span>
                           </td>
 
-                          {/* M-Cap */}
-                          <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
-                            {s.marketCap}
+                          {/* Traded value */}
+                          <td
+                            style={{ padding: '12px', textAlign: 'right', fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}
+                            title={s.tradedValueEstimated ? 'Estimated: volume × typical price' : 'Volume × average traded price'}
+                          >
+                            {s.tradedValueEstimated ? '≈ ' : ''}{formatCrore(s.tradedValue / 1e7)}
                           </td>
 
                           {/* LTP */}
@@ -566,7 +513,7 @@ export default function MarketsPage() {
 
                           {/* Volume */}
                           <td style={{ padding: '12px', textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: '11.5px', color: 'var(--text-secondary)' }}>
-                            {formatIndianNumber(s.volume)}
+                            {formatIndianNumber(s.volume, 0)}
                           </td>
 
                           {/* Action Button */}
@@ -605,7 +552,7 @@ export default function MarketsPage() {
         {/* VIEW 2: Institutional Sector Treemap */}
         {viewMode === 'treemap' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <MarketHeatmap />
+            <MarketHeatmap stocks={stocks} stamp={<DataStamp source={snapshot?.source} asOf={snapshot?.asOf} isOpen={isOpen} />} />
           </div>
         )}
       </div>
