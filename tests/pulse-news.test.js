@@ -56,6 +56,13 @@ test('NSE timestamps explicitly use India offset and retain text only', () => {
   assert.deepEqual(events[0].symbols, ['ABC']);
   assert.throws(() => parseOfficialFeed('<!DOCTYPE rss [<!ENTITY x SYSTEM "file:///etc/passwd">]><rss/>', 'nse'));
 });
+test('NSE items without a source link are skipped instead of failing the feed', () => {
+  const linkless = '<item><title>SBI-ETF Gold</title><link/><description>Declaration of NAV</description><pubDate>18-Oct-2026 14:32:00</pubDate></item>';
+  const linked = '<item><title>Example</title><link>https://nsearchives.nseindia.com/corporate/ABC_123.pdf</link><description>Results</description><pubDate>18-Oct-2026 15:00:00</pubDate></item>';
+  const events = parseOfficialFeed(`<rss><channel>${linkless}${linked}</channel></rss>`, 'nse');
+  assert.equal(events.length, 1);
+  assert.equal(events[0].title, 'Example');
+});
 test('eligibility distrusts a forged availableAt earlier than observation', () => {
   assert.equal(eligibility({ publishedAt: record.publishedAt, firstSeenAt: now, availableAt: record.publishedAt }, '2026-10-12T23:00:00Z'), false);
 });
@@ -69,5 +76,7 @@ test('a malformed item outside the requested RSS batch does not break a bounded 
   const item = '<item><title>Announcement</title><link>https://nsearchives.nseindia.com/corporate/ABC_123.pdf</link><description>Results</description><pubDate>13-Oct-2026 22:33:14</pubDate></item>';
   const xml = `<rss><channel>${item}<item><link/></item></channel></rss>`;
   assert.equal(parseOfficialFeed(xml, 'nse', 1).length, 1);
-  assert.throws(() => parseOfficialFeed(xml, 'nse', 2));
+  assert.equal(parseOfficialFeed(xml, 'nse', 2).length, 1); // the linkless item is skipped
+  const badDate = '<item><title>X</title><link>https://nsearchives.nseindia.com/corporate/XYZ_1.pdf</link><pubDate>sometime</pubDate></item>';
+  assert.throws(() => parseOfficialFeed(`<rss><channel>${item}${badDate}</channel></rss>`, 'nse', 2));
 });

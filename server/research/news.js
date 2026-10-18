@@ -119,7 +119,10 @@ export function parseOfficialFeed(xml, sourceId, limit = 100) {
   if (!['nse', 'rbi'].includes(sourceId)) throw new Error('Unknown feed');
   const get = (item, tag) => decodeXml(item.match(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i'))?.[1] || '');
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return [...xml.matchAll(/<item(?:\s[^>]*)?>[\s\S]*?<\/item>/gi)].slice(0, limit).map(([item]) => {
+  // Some NSE notices (for example ETF NAV declarations) carry an empty <link/>. Without a
+  // source document a record cannot be verified, so those items are skipped, not fatal.
+  const linked = item => { try { return new URL(get(item, 'link')).protocol === 'https:'; } catch { return false; } };
+  return [...xml.matchAll(/<item(?:\s[^>]*)?>[\s\S]*?<\/item>/gi)].filter(([item]) => linked(item)).slice(0, limit).map(([item]) => {
     const rawDate = get(item, 'pubDate');
     const nse = rawDate.match(/^(\d{2})-([A-Za-z]{3})-(\d{4}) (\d{2}:\d{2}:\d{2})$/);
     const rbi = rawDate.match(/^(?:[A-Za-z]{3}, )?(\d{1,2}) ([A-Za-z]{3}) (\d{4}) (\d{2}:\d{2}:\d{2})$/);
