@@ -29,7 +29,7 @@ import pandas as pd
 from ml.pulse import atomic_json, utcnow
 
 START = pd.Timestamp("2022-01-01")
-PAUSE = .95
+INTERVAL = 1.8  # seconds between request starts per worker: under Upstox's 2,000 per 30 minutes with two workers
 COLUMNS = ["time", "open", "high", "low", "close", "volume"]
 
 
@@ -75,14 +75,16 @@ def months(recent=None, today=None):
     return list(pd.period_range(first, today.to_period("M"), freq="M"))
 
 
-def collect(data_dir, recent=None):
+def collect(data_dir, recent=None, shard=(0, 1)):
     root = Path(data_dir)
     manifest = json.loads((root / "collection.json").read_text(encoding="utf-8"))
-    instruments = [i for i in manifest["instruments"] if i.get("instrumentKey")]
+    instruments = [i for i in manifest["instruments"] if i.get("instrumentKey")][shard[0]::shard[1]]
     out_dir = minute_dir()
     auth = token()
-    current = pd.Timestamp.now(tz="Asia/Kolkata").to_period("M")
+    current = pd.Timestamp(pd.Timestamp.now(tz="Asia/Kolkata").date()).to_period("M")
     report = {"startedAt": utcnow(), "directory": str(out_dir), "instruments": len(instruments), "downloaded": 0, "skipped": 0, "empty": 0, "failed": []}
+    interval = INTERVAL * shard[1] / 2 if shard[1] > 1 else INTERVAL / 2
+    last = 0.
     for n, inst in enumerate(instruments, 1):
         target = out_dir / inst["symbol"]
         target.mkdir(parents=True, exist_ok=True)
@@ -91,11 +93,12 @@ def collect(data_dir, recent=None):
             if path.exists() and month < current:
                 report["skipped"] += 1
                 continue
+            time.sleep(max(0., last + interval - time.monotonic()))
+            last = time.monotonic()
             try:
                 frame = fetch(inst["instrumentKey"], month.start_time, month.end_time.normalize(), auth)
             except Exception as err:  # recorded and retried next run
                 report["failed"].append({"symbol": inst["symbol"], "month": str(month), "error": str(err)[:200]})
-                time.sleep(PAUSE)
                 continue
             if frame.empty:
                 report["empty"] += 1
@@ -103,10 +106,10 @@ def collect(data_dir, recent=None):
             frame.to_csv(tmp, index=False, compression="gzip")
             os.replace(tmp, path)
             report["downloaded"] += 1
-            time.sleep(PAUSE)
         print(f"{n}/{len(instruments)} {inst['symbol']} downloaded={report['downloaded']} failed={len(report['failed'])}", flush=True)
     report["completedAt"] = utcnow()
-    atomic_json(root / "reports" / "minute-collection.json", report)
+    suffix = f"-{shard[0]}of{shard[1]}" if shard[1] > 1 else ""
+    atomic_json(root / "reports" / f"minute-collection{suffix}.json", report)
     return report
 
 
@@ -131,8 +134,10 @@ def main():
     parser.add_argument("command", choices=["collect"])
     parser.add_argument("--data-dir", default="data/pulse")
     parser.add_argument("--recent", type=int, help="only the current month and this many before it")
+    parser.add_argument("--shard", default="0/1", help="worker k of n, e.g. 0/2 and 1/2 run in parallel")
     args = parser.parse_args()
-    report = collect(args.data_dir, args.recent)
+    k, n = (int(x) for x in args.shard.split("/"))
+    report = collect(args.data_dir, args.recent, (k, n))
     print(json.dumps({k: v if k != "failed" else len(v) for k, v in report.items()}))
 
 
