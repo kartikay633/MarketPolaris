@@ -1,5 +1,114 @@
 # Pulse research results
 
+## Crisis replay: hold, de-risk or buy the dip? — 20 October 2026 (research, no change)
+
+Protocol committed before any result: `ml/CRISIS_PROTOCOL.md` (b34e441). Code: `ml/crisis_study.py`. No-lookahead
+tests: `ml/test_crisis_study.py`. Run `python -m ml.crisis_study run`. The full report is
+`data/pulse/reports/crisis-study.json`. Bots, planner and customer pages are unchanged.
+
+**Answer: keep the current rules.** No crisis policy passed the pre-registered gates. Every policy also
+beat NIFTY, but most of that margin comes from survivorship bias (see "Caveats"), so it is not
+evidence. With 15 episodes, mostly short, confidence in any ranking between policies is **low**.
+
+**Setup.**
+
+* **Signal** (mechanical): India VIX above its trailing-year 95th percentile, or NIFTY 50 at least
+  10% below its 60-session high. It was on for 11.6% of sessions from October 2017.
+* **Episodes:** 21 in total, 15 inside the planner window.
+* **Known events the signal caught:** Oct 2018 IL&FS, Covid (2 Mar to 4 Jun 2020), Russia–Ukraine
+  (22 Feb to 15 Mar 2022), May and June 2022, the May–June 2024 election run-up, the Nov 2024 to Mar
+  2025 correction, the April 2025 tariff shock and a March 2026 fall of 15%.
+* **Noise:** six episodes are single-day or "VIX only" blips.
+* **Planner replay:** a Python port of `bots.js` plus `advisor.js` (balanced 1-month plan, ₹2 lakh,
+  21-session rebalance, daily check-ups, 0.12% per side, fills at the next open). It runs from 16 Aug
+  2019 to 19 Oct 2026 (1,780 sessions).
+  * On today's live forecasts the port gives the same holdings as the JavaScript `buildPlan` for
+    three budgets, and the same sells, trims and adds as `reviewPortfolio` for three portfolios.
+  * Model outputs are rebuilt point in time: momentum ranking and pulse-risk-v4 (ensemble), refitted
+    every 63 sessions (32 refits) on matured labels, with a walk-forward calibrator.
+
+| Policy | CAGR | Max drawdown | Recovery (sessions) | CAGR ÷ \|DD\| | Avg invested |
+|---|---|---|---|---|---|
+| (a) NIFTY buy-and-hold | 10.6% | −38.4% | 206 | 0.28 | 100% |
+| (b) Current bot rules | 41.1% | −32.6% | 112 | 1.26 | 90% |
+| (c) De-risk (50% invested on signal, back in over 21 sessions) | 38.6% | **−22.6%** | 449 | **1.70** | 79% |
+| (d) Buy the dip (0% cash buffer, no check-up sells in crisis) | **47.7%** | −37.3% | 133 | 1.28 | 93% |
+| (e) Hold through (no check-up sells in crisis) | 39.8% | −36.3% | 147 | 1.10 | 91% |
+| *Context: equal-weight buy-and-hold of today's 169 stocks* | *25.5%* | *−37.8%* | *141* | *0.67* | *100%* |
+
+**Pre-registered gates against (b).**
+
+* G1: higher CAGR ÷ |DD|.
+* G2: CAGR no more than 1 point a year lower.
+* G3: wins at least 10 of the 15 episode windows. Each window runs from signal onset to 63 sessions
+  after the signal clears.
+* G4: the same direction in the NIFTY-only arm from October 2017.
+
+| Policy | G1 | G2 | G3 (wins) | G4 | Result | Bootstrap 90% interval, annual return vs (b) |
+|---|---|---|---|---|---|---|
+| (c) De-risk | pass | **fail** (−2.5 pts) | **fail** (5/15) | pass (0.32 vs 0.25) | fails | −8.1% to +3.1% |
+| (d) Buy the dip | pass (1.28 vs 1.26) | pass | **fail** (9/15) | **fail** (0.24 vs 0.25) | fails | +0.7% to +9.2% |
+| (e) Hold through | **fail** | **fail** | **fail** (9/15) | n/a | fails | −2.2% to +0.4% |
+
+**What it says.**
+
+* **De-risking does what it promises on pain, and costs return.**
+  * Max drawdown fell by a third: Covid went from −27% to −13% inside the episode, and the 2024–25
+    correction from −21% to −16%.
+  * It lost the rebound in 10 of 15 episodes, about 2.5 points a year.
+  * Its worst drawdown took longer to recover (449 sessions), because the scale-back-in rule bought
+    back gradually.
+  * The NIFTY-only arm shows the same trade-off: 6.9% vs 8.9% CAGR, −21.8% vs −35.4% drawdown.
+* **Buy-the-dip earned the most, but not in crashes and not robustly.**
+  * Its edge is mostly outside the big falls. In Covid it did worse than (b), +10.5% vs +14.2%.
+  * It failed the episode count and the NIFTY-only arm, where deploying the 10% cash buffer in a dip
+    did nothing (9.2% vs 8.9%, slightly worse ratio).
+  * The likely source is more exposure and extra rebalances into fresh momentum names, in a universe
+    that rose 25% a year with hindsight. It is not a demonstrated crisis skill.
+* **"Just hold" was worse than the current rules.** Suspending the check-up's stop-loss sells and
+  elevated-risk trims during crises:
+  * lowered CAGR (39.8% vs 41.1%);
+  * deepened the worst drawdown (−36.3% vs −32.6%).
+
+  The current rules made 49 check-up sells in crises, and on balance they helped. The bot does not
+  panic-sell in a damaging way.
+* **The signal is noisy.** About a third of episodes are one-day or VIX-only blips that a hands-off
+  investor would not call a crisis. The non-decisional variants (drawdown rule only, VIX rule only)
+  do not change the ranking:
+  * de-risk is still about 39% CAGR with a −22% to −25% drawdown;
+  * buy-the-dip is 44% with −37% to −38%;
+  * hold-through is 40% with −36%.
+
+**Caveats.**
+
+* **Survivorship bias dominates the absolute numbers.** The universe is today's 175 liquid stocks, so
+  equal-weighting them with hindsight returned 25.5% a year against NIFTY's 10.6%. The bot's 41% (as
+  much as +139% in 2021) is not an achievable return. Only the differences between policies, which
+  share the universe, are informative, and even those favour staying invested.
+* **Model choices were made with data up to about 2024.** The momentum factor, the v4 ensemble and
+  the features are today's choices, so this tests crisis rules around today's planner, not the
+  models.
+* **Few, overlapping episodes.** There are 15 planner-window episodes. That clears the protocol's 8-episode floor, but they overlap,
+  six are blips, and no policy passed, so confidence stays low. Covid is the only crash of 30% or
+  more in the window.
+* **What the replay does not model:**
+  * the cash earns nothing (a liquid fund would narrow de-risk's return gap by about 0.5–1 point a
+    year at 6–7%);
+  * no new money comes in;
+  * there is no leverage;
+  * circuit limits and illiquidity on crash days are ignored.
+
+**For the founders.** For a hands-off investor the evidence supports keeping the current rules.
+Neither selling into a panic nor buying the dip beat them reliably. If the product wants a
+"smoother ride" option, the de-risk rule is the honest candidate:
+
+* about one-third smaller worst drawdown;
+* about 2–3 points a year less return;
+* recovery from the worst fall can take longer.
+
+That is a customer-preference trade-off, not an edge. It would need the usual live shadow period
+before any change.
+
 ## How fast prices absorb NSE filings (minute level) — 19 October 2026 (research)
 
 `python -m ml.filing_reaction run`. This measured 110,551 filings for our stocks, January 2022 to
