@@ -1,5 +1,99 @@
 # Pulse research results
 
+## v5 candidate: reported quarterly results (revenue, profit, EPS) — 19 October 2026 (not adopted)
+
+**Data** (`python -m ml.results_history collect`, then `parse`): NSE's
+financial-results listing (quarters to December 2024, XBRL from mid-2018) and its
+integrated-filing listing (from the March 2025 quarter). The collector downloaded
+5,135 XBRL filings for 175 stocks, one request every 1.5 seconds. NSE never blocked
+it. 28 filings return 404 on NSE's archive and are recorded as missing.
+
+* One basis per stock (consolidated wherever it covers most quarters: 4,816 of the
+  5,096 parsed quarters) and the earliest filing per quarter, never a later revision.
+* Parsed figures: revenue (banks: interest earned; insurers: gross premium),
+  profit attributable to owners, and basic EPS. Values come from the filing's own
+  undimensioned quarter context. 39 filings whose stated period is not the listed
+  quarter (half-years, mislabelled rows) are rejected.
+* Gaps: insurers are only in the integrated listing (5–7 quarters each). MCX has no
+  XBRL quarters, and nothing exists before the March 2018 quarter.
+
+**Timing** (`ml/results_features.py`; leakage tests in
+`ml/test_results_features.py`). A quarter's numbers count from the first 18:00 IST
+cutoff at or after the earlier of two times:
+
+* NSE's dissemination of the XBRL filing;
+* the first NSE announcement mentioning results on the board-meeting date or up to
+  three days after it. The meeting date is the one the filing states, or for older
+  filings the first results meeting in NSE's board-meeting history within 75 days
+  of quarter end. If the announcement names a period, it must be this quarter.
+
+The announcement sets the time for 92% of quarters (median 34 days after quarter
+end). Older XBRL filings were sometimes disseminated months late. One unrelated
+"Outcome of Board Meeting" match (VEDL, Sep-2020 quarter, a month early) was caught
+before any evaluation, and the period check was added to rule out matches like it.
+
+**Inputs:**
+
+* year-on-year growth of revenue (log), net profit and EPS
+* standardised unexpected profit: this quarter's year-on-year profit change minus
+  the previous four quarters' mean change, over the standard deviation of the
+  previous eight changes (a surprise proxy without analyst estimates)
+* revenue acceleration, net-margin change, a loss flag
+* sessions since results, a surprise weighted by freshness, an availability flag
+
+Year-on-year and trend comparisons use only quarters already known at the time.
+Results older than 200 days are treated as missing. Volatility gets the raw values;
+ranking gets their same-date cross-sectional ranks.
+
+**Development folds** (`python -m ml.results_study`). The gate was fixed before
+running: +0.005 mean metric and better in at least 3 of 4 folds. Results inputs
+cover 94–97% of validation rows in every fold, but only 52–77% of training rows,
+because the XBRL history starts in 2018.
+
+| Model | Without results | With results | Folds better | Gate | XBRL-time diagnostic |
+|---|---|---|---|---|---|
+| Volatility v4, ensemble (AUC) | 0.6575 | 0.6559 | 1 of 4 | fail | 0.6540 (0/4) |
+| Volatility v4, logistic (AUC) | 0.6546 | 0.6539 | 1 of 4 | fail | 0.6511 (1/4) |
+| Ranking 5-session, ensemble (rank IC) | 0.0284 | 0.0226 | 1 of 4 | fail | 0.0215 (1/4) |
+| Ranking 5-session, logistic (rank IC) | 0.0234 | 0.0204 | 1 of 4 | fail | 0.0196 (1/4) |
+| Ranking 20-session, ensemble (rank IC) | 0.0271 | 0.0309 | 2 of 4 | fail | 0.0391 (3/4, would pass) |
+| Ranking 20-session, logistic (rank IC) | 0.0314 | 0.0269 | 2 of 4 | fail | 0.0271 (1/4) |
+
+No configuration passed, so the holdout was not used and both models are
+unchanged. The last column repeats the study with XBRL dissemination time only
+(`--timing xbrl`). That check was declared non-decisional before either run.
+
+Under the later XBRL timing, the 20-session ranking ensemble would pass (+0.012,
+3 of 4 folds). That doesn't make it a candidate:
+
+* It is 1 configuration out of 12, and it is the noisiest baseline (fold IC
+  0.009–0.056).
+* Timing is the only change. If later timing helps where the accurate timing
+  does not, that points to fold noise, or to stepping past the short-term reversal
+  described below. It is not evidence of drift.
+* The same configuration passed the delivery study's development gate and then
+  failed its holdout.
+
+**Why it failed.** A descriptive check on development dates only, not used for the
+decision: stocks whose results came out in the previous three sessions, ranked by
+surprise or growth against their later return versus the universe median.
+
+* Profit surprise: mean daily IC −0.025 (t −1.6) over 5 sessions and −0.024 (t −1.5)
+  over 20.
+* Year-on-year profit growth: −0.012 and −0.002.
+* Revenue growth: −0.044 (t −3.0) and −0.002.
+
+There is no post-earnings drift in this universe of liquid large and mid caps. If
+anything, the stocks with the strongest growth give back a little of their jump
+from results day over the following week. The results-day move itself is already
+in the price-based inputs. The published Indian PEAD evidence comes mostly from
+broader samples with smaller, less-covered companies; the 175 here are heavily
+covered by analysts. For volatility, the results calendar (v3) already captures what
+matters, namely that results are coming. The size of the surprise adds nothing to
+that.
+
+The collector (`collect --refresh` adds new quarters) is not in the nightly job.
+
 ## v5 candidate: NSE delivery and bulk/block deals — 19 October 2026 (not adopted)
 
 **Data** (`python -m ml.flow_history collect`): all 2,480 sessions from 18 Oct 2016
