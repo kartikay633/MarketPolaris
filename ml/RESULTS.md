@@ -1,5 +1,44 @@
 # Pulse research results
 
+## v5 candidate: global markets, oil and the rupee — 19 October 2026 (not adopted)
+
+**Data.** Upstox GLOBAL_INDEX and GLOBAL_INDICATOR daily candles from April 2020
+(`scripts/pulse-global.js`):
+
+* markets: S&P 500, Nasdaq-100, Dow, Dow futures, GIFT NIFTY, Nikkei, Hang Seng,
+  DAX, FTSE
+* commodities and currency: Brent, WTI, USD/INR
+
+The provider's global candle dates are inconsistent (skipped sessions, weekend
+rows), so a value counts for NSE date t only if its candle is dated at least two
+calendar days earlier (`ml/global_features.py`, leakage tests in
+`ml/test_global_features.py`).
+
+**Inputs:**
+
+* market-level: S&P 500, Nasdaq-100, Hang Seng and Nikkei trends; S&P 500 realised
+  volatility and drawdown; Brent and USD/INR changes; Brent volatility
+* stock-specific: each stock's 120-session sensitivity (beta) to Brent, USD/INR and
+  the S&P 500, multiplied by the latest 20-session move
+
+**Development folds** (`python -m ml.v5_study`). The gate was fixed before running:
++0.005 mean metric and better in at least 75% of folds.
+
+| Model | Attempt 1: all development data | Attempt 2: from Oct 2020 only (3 folds) |
+|---|---|---|
+| Volatility v4 ensemble, AUC | 0.6575 → 0.6401 (2/4 better) | 0.6539 → 0.6484 (1/3) |
+| Volatility v4 logistic, AUC | 0.6546 → 0.6243 (1/4) | 0.6560 → 0.6509 (1/3) |
+| Ranking 5-session ensemble, IC | 0.0284 → 0.0250 (2/4) | 0.0117 → 0.0134 (1/3) |
+| Ranking 20-session ensemble, IC | 0.0271 → 0.0354 (2/4) | 0.0320 → 0.0330 (1/3) |
+| Ranking 20-session logistic, IC | 0.0314 → 0.0275 (3/4) | 0.0282 → 0.0275 (2/3) |
+
+Attempt 2 removed the confound of training on years with missing global data. No
+configuration passed in either attempt, so the holdout was not used and v4 stays.
+Global effects reach NSE prices within a day and are already reflected in the
+stock's own price, volatility and India VIX inputs. The collector stays in the
+nightly job (non-fatal) for future research and for showing real global markets in
+the app.
+
 ## Qwen 2.5 3B disclosure tags as model inputs — 19 October 2026 (not adopted)
 
 The local model labelled 100,093 NSE filings (74,472 unique texts) with event type,

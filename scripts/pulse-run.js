@@ -22,7 +22,7 @@ try {
   lock=await open(lockFile,'wx');
   await lock.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),mode}));
   await access(python);
-  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','ml.test_disclosure','ml.test_option_features','-v']);
+  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','ml.test_disclosure','ml.test_option_features','ml.test_global_features','-v']);
   else if(mode==='forward') {
     await execute(python,['-m','ml.rank','score-forward','--data-dir',DATA_DIR]);
     await execute(python,['-m','ml.risk','score-forward','--data-dir',DATA_DIR]);
@@ -39,6 +39,9 @@ try {
       // Stock implied volatility for the volatility model: NSE F&O bhavcopies, published after the close.
       try { await execute(python,['-m','ml.fo_history','collect','--data-dir',DATA_DIR,'--recent','10']); }
       catch { console.warn('F&O bhavcopy collection failed; implied volatility carries forward up to 3 sessions, then is imputed.'); }
+      // Global markets, oil and the rupee for the v5 shadow research (stored apart from NSE candles).
+      try { await execute(process.execPath,['scripts/pulse-global.js']); }
+      catch { console.warn('Global market collection failed; v5 shadow inputs carry forward up to 7 days.'); }
     }
     const report=await readJson(path.join(DATA_DIR,'reports/latest.json'));
     if(mode==='update'&&!report) throw new Error('No trained model. Run npm run research:train first.');
