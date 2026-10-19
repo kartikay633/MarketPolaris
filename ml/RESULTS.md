@@ -1,5 +1,53 @@
 # Pulse research results
 
+## v5 candidate: intraday prices, panic/dip breadth and the option surface — 19 October 2026 (not adopted)
+
+Protocol committed before any result: `ml/V5_PROTOCOL.md` (d3322b5). Code: `ml/minute_history.py`,
+`ml/v5_features.py` (no-lookahead tests in `ml/test_v5_features.py`), `ml/v5_intraday_study.py`.
+
+**Data.**
+
+* Upstox 1-minute candles, January 2022 to 16 October 2026: 189 instruments and 10,687 monthly files,
+  stored outside the repository under `D:/MarketPulseML/minute`.
+* The download ran at under 2,000 requests per 30 minutes. Two months failed on network errors, and
+  both succeeded on retry.
+* Intraday inputs cover 99–100% of rows from 2022 and none before. Holdout coverage is 99.8%.
+* The option surface (put and call skew, put/call open interest, open-interest change and futures
+  build-up) comes from the stored F&O bhavcopies, 2016–2026. It covers 71–85% of rows a year.
+
+**Development folds.** There are 8 quarterly folds, January 2023 to the holdout start, trained on
+all earlier development rows. The gate was fixed in advance: +0.005 mean AUC and better in at
+least 6 of 8 folds.
+
+| Arm | Model | Mean AUC | Gain vs v4 | Folds better | Gate | Calibrated accuracy | Top-20% accuracy |
+|---|---|---|---|---|---|---|---|
+| A v4 | logistic | 0.6427 | | | | 68.8% | 85.7% |
+| A v4 | ensemble | 0.6446 | | | | 68.1% | 84.3% |
+| B + intraday + panic | logistic | 0.6436 | +0.0009 | 5/8 | fail | 68.4% | 84.7% |
+| B + intraday + panic | ensemble | 0.6495 | +0.0049 | 5/8 | fail | 67.5% | 84.1% |
+| C + option surface | logistic | 0.6448 | +0.0020 | 6/8 | fail | 68.7% | 86.0% |
+| C + option surface | ensemble | 0.6484 | +0.0037 | 6/8 | fail | 68.0% | 84.3% |
+| D + all | logistic | 0.6453 | +0.0026 | 5/8 | fail | 68.4% | 84.7% |
+| D + all | ensemble | 0.6529 | +0.0083 | 5/8 | fail | 67.4% | 83.9% |
+
+No arm passed, so the holdout was not used and pulse-risk-v4 stays live.
+
+**Why the gains are not real:**
+
+* The largest mean gain (D, ensemble, +0.008) comes mostly from one quarter, 2024 Q1 (+0.05 AUC).
+  It is worse in three of eight quarters, by up to −0.027 in 2024 Q3.
+* The same arm lowers calibrated accuracy (68.1% to 67.4%) and top-20% accuracy (84.3% to 83.9%).
+  Those are the numbers customers would see.
+* The option surface is the most consistent (6 of 8 quarters for both models) but too small:
+  +0.002 to +0.004.
+* Minute-level volatility, downside semivariance, jumps, the intraday sell-off and recovery, market
+  breadth and the India VIX range are all measured from the same price path as v4's daily range
+  estimators and implied volatility. They add detail, but little information the 20-session
+  forecast lacks.
+* Intraday training rows start in January 2022, so the tree models see about one to three years of
+  them. A later re-test with more history is reasonable, under the same protocol and a new
+  pre-registration.
+
 ## v5 candidate: reported quarterly results (revenue, profit, EPS) — 19 October 2026 (not adopted)
 
 **Data** (`python -m ml.results_history collect`, then `parse`): NSE's
