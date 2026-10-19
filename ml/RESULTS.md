@@ -1,5 +1,69 @@
 # Pulse research results
 
+## v5 candidate: NSE delivery and bulk/block deals — 19 October 2026 (not adopted)
+
+**Data** (`python -m ml.flow_history collect`): all 2,480 sessions from 18 Oct 2016
+to 16 Oct 2026 and 121 months of deals. Nothing failed and NSE never blocked the
+collector (77 MB).
+
+* Delivery (traded quantity, delivered quantity, delivery %): NSE's security-wise
+  full bhavcopy from late 2019, and before that NSE's MTO delivery-position file,
+  which holds the same figures. On an overlap day the two agree exactly on traded
+  quantity and on 99.9% of delivered quantities. NSE served 8 Aug 2022's full
+  bhavcopy as an Excel workbook, so that day comes from the MTO file.
+* Bulk and block deals: the CSV download of NSE's bulk/block-deal report, one month
+  per request. The JSON view of the same report stops at 70 rows, and the older
+  `api/historical/bulk-deals` path answers 503, so neither is used.
+* In the universe: 130–440 bulk-deal and 5–1,770 block-deal records a year. 7.8% of
+  stock-sessions have a deal in the previous 20 sessions.
+
+**Inputs** (`ml/flow_features.py`; leakage tests in `ml/test_flow_features.py`).
+Figures for session t count from t's close, like the closing price. Deals dated on
+non-trading days count from the next session.
+
+* delivery share, its 5-session mean, and each versus the stock's own previous
+  20- and 60-session median
+* abnormal delivered quantity (1 and 5 sessions)
+* bulk and block deal counts over 20 sessions
+* deal buy minus sell quantity, and buy plus sell quantity, as a share of
+  20-session volume
+* any deal in the last 5 sessions
+
+Volatility gets the raw values. Ranking gets their same-date cross-sectional ranks.
+
+**Development folds** (`python -m ml.flow_study dev`). The gate was fixed before
+running: +0.005 mean metric and better in at least 3 of 4 folds. Delivery covers
+99.3–99.9% of rows in every fold and deals cover 100%, so there was no coverage
+confound.
+
+| Model | Without flow | With flow | Folds better | Gate |
+|---|---|---|---|---|
+| Volatility v4, ensemble (AUC) | 0.6575 | 0.6585 | 3 of 4 | fail (+0.001) |
+| Volatility v4, logistic (AUC) | 0.6546 | 0.6587 | 3 of 4 | fail (+0.004) |
+| Ranking 5-session, ensemble (rank IC) | 0.0284 | 0.0327 | 2 of 4 | fail |
+| Ranking 5-session, logistic (rank IC) | 0.0234 | 0.0298 | 2 of 4 | fail |
+| Ranking 20-session, ensemble (rank IC) | 0.0271 | 0.0338 | 4 of 4 | **pass** (+0.0067) |
+| Ranking 20-session, logistic (rank IC) | 0.0314 | 0.0362 | 2 of 4 | fail |
+
+**Holdout, scored once, for the passing configuration only** (`python -m ml.flow_study
+holdout`, 438 sessions, refit every 63 sessions):
+
+| 20-session ranking, ensemble | Mean rank IC (95% CI) | IC > 0 | Accuracy |
+|---|---|---|---|
+| v2 | −0.004 (−0.047 to +0.042) | 47.5% | 49.4% |
+| v2 + flow | −0.008 (−0.047 to +0.032) | 46.6% | 49.5% |
+
+The development gain did not hold up on the holdout. One pass out of eight tested
+configurations is about what chance alone would produce. Twenty-session ranking also
+had no holdout skill in pulse-rank-v2 (the shipped momentum rule scored +0.025,
+inconclusive). Both models are unchanged.
+
+Flow does carry some information. Every development comparison moved up, and the
+volatility logistic gain was +0.004 in 3 of 4 folds. But that information mostly
+overlaps with the volume, turnover and implied-volatility inputs the models already
+have. The collector supports `--recent N` for daily updates. It is not in the
+nightly job.
+
 ## v5 candidate: global markets, oil and the rupee — 19 October 2026 (not adopted)
 
 **Data.** Upstox GLOBAL_INDEX and GLOBAL_INDICATOR daily candles from April 2020
