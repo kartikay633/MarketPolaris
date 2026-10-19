@@ -1,5 +1,38 @@
 # Pulse research results
 
+## How fast prices absorb NSE filings (minute level) — 19 October 2026 (research)
+
+`python -m ml.filing_reaction run`. This measured 110,551 filings for our stocks, January 2022 to
+16 October 2026, from NSE's dissemination second, against NIFTY 50 over the same minutes. It is
+descriptive research and changes no model.
+
+* **Results move prices a lot, but not instantly.** During market hours, a "Financial Result
+  Updates" filing moves the stock 185 bps (absolute, abnormal) by the close. About 26% of that move
+  happens within 5 minutes, 53% within 15 and 85% within 60. "Outcome of Board Meeting" filings
+  show the same shape (162 bps; 29%, 57% and 87%). Results filed after hours gap 2.1% at the next
+  open and move 3.1% by that close.
+* **The first move does not predict the rest.** After the first 5, 15 or 30 minutes, the return to
+  the close shows no continuation in the direction of the initial move, across all filings and
+  every large category:
+  * market hours, all filings: +0.2 bps after 5 minutes (t 0.3);
+  * market-hours results: +4.6 bps (t 0.5);
+  * after-hours results: −11 bps (t −1.4).
+
+  Reacting to the headline a few minutes after NSE publishes it, in the direction the price first
+  moved, has no edge even before trading costs (about 10 bps each way).
+* **Possible exceptions, not established.** About 60 groups were tested, so one or two |t| ≈ 2
+  results are expected by chance:
+  * order wins filed after hours continued after the first 5 minutes of the next open
+    (+31 bps, t 2.0, n = 100);
+  * CEO/MD/CFO resignations during market hours kept falling after 30 minutes (−54 bps, t −2.0,
+    n = 24).
+
+  Each needs its own pre-registered test on later data before it means anything.
+* **What it means for the filing reader.** About half of a results-day move happens after the first
+  15 minutes, but its direction is not visible in the price at that point. If any part of it is
+  predictable, it has to come from what the filing says. That is the question for stage 2 of
+  `ml/FILING_READER_PROTOCOL.md`.
+
 ## v5 candidate: intraday prices, panic/dip breadth and the option surface — 19 October 2026 (not adopted)
 
 Protocol committed before any result: `ml/V5_PROTOCOL.md` (d3322b5). Code: `ml/minute_history.py`,
