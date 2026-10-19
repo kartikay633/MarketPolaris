@@ -100,3 +100,34 @@ def disclosure_flow(disclosures, cal, stocks):
     return {"filings_1": daily["all"], "filings_5": roll(daily["all"], 5), "filings_20": roll(daily["all"], 20),
             "clarifications_20": roll(daily["clar"], 20), "red_flags_60": roll(daily["red"], 60),
             "promoter_filings_20": roll(daily["promoter"], 20), "results_filed_5": roll(daily["results"], 5)}
+
+
+TAG_FEATURES = ["tag_neg_5", "tag_neg_20", "tag_pos_20", "tag_major_20", "tag_neg_major_20", "tag_net_tone_20",
+                "tag_legal_neg_20", "tag_promoter_neg_20", "tag_disruption_neg_20", "tag_results_major_5"]
+
+
+def tag_features(disclosures, tags, cal, stocks):
+    """Wide counts of local-LLM-tagged filings known by each session's 18:00 cutoff.
+
+    disclosures: ml.news_study.load_disclosures output; tags: rows of news-history/tags.json.
+    Tags are model output used only as research inputs and judged by walk-forward tests."""
+    d = disclosures.merge(pd.DataFrame(tags), on=["symbol", "seq"], how="inner")
+    d = d.loc[d.symbol.isin(stocks)].copy()
+    d["k"] = known_session(d.ts, cal)
+    d = d.loc[d.k < len(cal)]
+    kinds = {"neg": d.tone == "negative", "pos": d.tone == "positive", "major": d.magnitude >= 2,
+             "neg_major": (d.tone == "negative") & (d.magnitude >= 2),
+             "legal_neg": (d.event.isin(["litigation_or_regulatory_action", "tax_raid_or_fraud"])) & (d.tone == "negative"),
+             "promoter_neg": (d.event == "promoter_stake_change_or_pledge") & (d.tone == "negative"),
+             "disruption_neg": (d.event == "accident_strike_or_disruption") & (d.tone == "negative"),
+             "results_major": (d.event == "results") & (d.magnitude >= 2)}
+    daily = {}
+    for name, mask in kinds.items():
+        c = d.loc[mask.to_numpy()].groupby(["k", "symbol"]).size().unstack(fill_value=0)
+        daily[name] = c.reindex(index=range(len(cal)), columns=stocks, fill_value=0).set_axis(cal, axis=0).astype(float)
+    roll = lambda x, n: x.rolling(n, min_periods=1).sum()
+    return {"tag_neg_5": roll(daily["neg"], 5), "tag_neg_20": roll(daily["neg"], 20), "tag_pos_20": roll(daily["pos"], 20),
+            "tag_major_20": roll(daily["major"], 20), "tag_neg_major_20": roll(daily["neg_major"], 20),
+            "tag_net_tone_20": roll(daily["pos"], 20) - roll(daily["neg"], 20),
+            "tag_legal_neg_20": roll(daily["legal_neg"], 20), "tag_promoter_neg_20": roll(daily["promoter_neg"], 20),
+            "tag_disruption_neg_20": roll(daily["disruption_neg"], 20), "tag_results_major_5": roll(daily["results_major"], 5)}

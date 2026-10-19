@@ -1,5 +1,40 @@
 # Pulse research results
 
+## Qwen 2.5 3B disclosure tags as model inputs — 19 October 2026 (not adopted)
+
+The local model labelled 100,093 NSE filings (74,472 unique texts) with event type,
+tone and magnitude (`ml.news_tags`, about 16 hours on an RTX 3050). Event study by
+label (`reports/news-study.json`):
+
+* Tone does not predict direction. "Results, positive" rose on the first session
+  47% of the time, the same as "results, neutral".
+* Results and dividend labels mark the big moves (1.4–1.5σ versus 0.73σ), which the
+  results calendar already captures.
+* Two contrarian effects, abnormal 5-session drift from the next open:
+  * negative legal/regulatory filings: +0.8% (t = 6.1, n = 1,104)
+  * negative promoter stake/pledge filings: +1.0% (t = 4.5, n = 526)
+
+  Overlapping events can inflate these t-statistics, so they are not trusted
+  without a walk-forward test.
+
+**Walk-forward test** (`ml.disclosure_features.tag_features`: counts of negative,
+positive, major, legal-negative, promoter-negative, disruption-negative and major
+results filings known by the 18:00 IST cutoff). The gates were fixed before
+running: +0.005 in the mean metric and better in at least 3 of 4 folds.
+
+| Model | Without tags | With tags | Folds better | Gate |
+|---|---|---|---|---|
+| Volatility v4, ensemble (AUC) | 0.6575 | 0.6586 | 2 of 4 | fail |
+| Volatility v4, logistic (AUC) | 0.6546 | 0.6542 | 2 of 4 | fail |
+| Ranking 5-session, ensemble (rank IC) | 0.0284 | 0.0264 | 1 of 4 | fail |
+| Ranking 5-session, logistic (rank IC) | 0.0234 | 0.0236 | 2 of 4 | fail |
+
+The tags add nothing the price, implied-volatility and results-calendar inputs do
+not already carry. The holdout was not used. Both models are unchanged. The tags
+remain available for customer-facing context, such as explaining a filing in chat
+or alerting a holder to a major negative filing, where they are descriptions,
+not forecasts.
+
 ## pulse-risk-v4 — volatility risk forecast with implied volatility, 18 October 2026 (current)
 
 v3 inputs plus the four core implied-volatility inputs below (`o_lr_iv`,
