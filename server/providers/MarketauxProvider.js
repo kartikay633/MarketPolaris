@@ -6,6 +6,8 @@ import logger from '../utils/logger.js';
 // Serves only articles the Marketaux feed returned, each with its own source link. When the
 // feed is unconfigured, down or short, the list is simply shorter (possibly empty) and the UI
 // shows its neutral empty state; there are no built-in sample articles.
+const MIN_MATCH = 20;
+
 export class MarketauxProvider extends NewsProvider {
   constructor() {
     super();
@@ -57,9 +59,11 @@ export class MarketauxProvider extends NewsProvider {
       const res = await axios.get(`${this.baseUrl}/news/all`, {
         params: {
           api_token: this.apiKey,
-          countries: 'in',
           language: 'en',
-          search: cleanSym,
+          // The exact NSE/BSE listing, not a text search: "RELIANCE" as text also matches
+          // Reliance Power and Reliance Infra, which are different companies.
+          symbols: `${cleanSym}.NS,${cleanSym}.BO`,
+          filter_entities: 'true',
           limit: Math.min(limit, 10),
         },
         timeout: 7000,
@@ -81,17 +85,18 @@ export class MarketauxProvider extends NewsProvider {
   }
 
   _normalizeArticle(item, category = 'market', fallbackSymbols = []) {
+    // Only Indian listings the article is clearly about: foreign tickers (e.g. HDB.BA) and
+    // weak matches (Marketaux match_score below MIN_MATCH) produced misleading tags.
+    const entities = (item.entities || [])
+      .filter((e) => /\.(NS|BO)$/.test(e.symbol || '') && (e.match_score ?? 0) >= MIN_MATCH)
+      .sort((a, b) => (b.match_score ?? 0) - (a.match_score ?? 0));
     let sentiment = 'neutral';
-    if (item.entities && item.entities.length > 0) {
-      const score = item.entities[0].sentiment_score;
-      if (typeof score === 'number') {
-        sentiment = score > 0.1 ? 'positive' : score < -0.1 ? 'negative' : 'neutral';
-      }
+    const score = entities[0]?.sentiment_score;
+    if (typeof score === 'number') {
+      sentiment = score > 0.1 ? 'positive' : score < -0.1 ? 'negative' : 'neutral';
     }
 
-    const symbols = (item.entities || [])
-      .map((e) => (e.symbol ? `NSE:${e.symbol.replace('.NS', '').replace('.BO', '')}` : null))
-      .filter(Boolean);
+    const symbols = [...new Set(entities.map((e) => `NSE:${e.symbol.replace(/\.(NS|BO)$/, '')}`))];
 
     return {
       id: item.uuid || item.url,

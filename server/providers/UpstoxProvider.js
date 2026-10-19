@@ -605,7 +605,7 @@ export class UpstoxProvider extends MarketDataProvider {
     const normInterval = (interval || '').toUpperCase();
     if (normInterval === '1D' || interval === '1minute') {
       upstoxInterval = '1minute';
-      daysBack = 2;
+      daysBack = 6; // reaches the last completed session across a weekend or holiday
     } else if (normInterval === '1W' || interval === '30minute') {
       upstoxInterval = '30minute';
       daysBack = 7;
@@ -631,21 +631,26 @@ export class UpstoxProvider extends MarketDataProvider {
     // Live Upstox candle fetch
     if (this.isLive && instKey) {
       try {
-        const res = await axios.get(
-          `${this.baseUrl}/historical-candle/${encodeURIComponent(instKey)}/${upstoxInterval}/${to}/${from}`,
-          {
-            headers: {
-              Authorization: `Bearer ${this.token}`,
-              Accept: 'application/json',
-            },
-            timeout: 8000,
-          }
-        );
+        const fetchCandles = async (url) => {
+          const res = await axios.get(url, { headers: { Authorization: `Bearer ${this.token}`, Accept: 'application/json' }, timeout: 8000 });
+          return Array.isArray(res.data?.data?.candles) ? res.data.data.candles : [];
+        };
+        const key = encodeURIComponent(instKey);
+        const historical = () => fetchCandles(`${this.baseUrl}/historical-candle/${key}/${upstoxInterval}/${to}/${from}`);
+        let raw;
+        if ((upstoxInterval === '1minute' || upstoxInterval === '30minute') && !toDate) {
+          // The historical endpoint serves completed sessions only; today's session is on the
+          // intraday endpoint. 1D shows today when it has traded, else the last completed session.
+          const today = await fetchCandles(`${this.baseUrl}/historical-candle/intraday/${key}/${upstoxInterval}`);
+          raw = upstoxInterval === '1minute' && today.length ? today : [...today, ...(await historical())];
+        } else {
+          raw = await historical();
+        }
 
-        if (res.data?.data?.candles && Array.isArray(res.data.data.candles) && res.data.data.candles.length > 0) {
-          // Upstox candle array: [timestamp, open, high, low, close, volume, oi]
-          // Upstox returns candles from newest to oldest; reverse to chronological for Lightweight Charts
-          const sorted = [...res.data.data.candles].reverse();
+        if (raw.length > 0) {
+          // Upstox candle array: [timestamp, open, high, low, close, volume, oi]; one row per
+          // timestamp, chronological for Lightweight Charts.
+          const sorted = [...new Map(raw.map((c) => [c[0], c])).values()].sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]));
           return sorted.map((c) => ({ ...toCandle(c), source: SOURCE_LIVE }));
         }
       } catch (err) {
