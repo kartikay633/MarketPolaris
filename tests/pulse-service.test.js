@@ -59,13 +59,43 @@ test('Gemini failure stays explicit and output claims are validated',async t=>{
   process.env.GEMINI_API_KEY='test-only';
   t.after(()=>{if(previous===undefined) delete process.env.GEMINI_API_KEY; else process.env.GEMINI_API_KEY=previous;});
   const request={message:'Explain the research limitations',horizon:5};
-  const failed=await researchChat(request,{dataDir,fetcher:async()=>({ok:false,status:503})});
-  assert.equal(failed.provider,'unavailable');
-  assert.match(failed.warning,/503/);
+  const offline={quote:async()=>null,nifty:async()=>null,sleep:async()=>{}};
+  let calls=0;
+  const failed=await researchChat(request,{dataDir,...offline,fetcher:async()=>{calls++;return {ok:false,status:503};}});
+  // Overload never reaches the customer as a provider error: retries, a fallback model, then a data-built answer.
+  assert.equal(failed.provider,'grounded');
+  assert.equal(calls,5);
+  assert.doesNotMatch(failed.reply+failed.warning,/gemini|http|503/i);
   const fake=async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({paragraphs:[{text:'Guaranteed 90% win rate',evidenceIds:[]}]})}]}}]})});
-  assert.equal((await researchChat(request,{dataDir,fetcher:fake})).provider,'unavailable');
+  assert.equal((await researchChat(request,{dataDir,...offline,fetcher:fake})).provider,'grounded');
   const valid=async()=>({ok:true,json:async()=>({candidates:[{content:{parts:[{text:JSON.stringify({paragraphs:[{text:'Evidence is insufficient to establish predictive skill.',evidenceIds:[]}]})}]}}]})});
-  assert.equal((await researchChat(request,{dataDir,fetcher:valid})).provider,'gemini');
+  assert.equal((await researchChat(request,{dataDir,...offline,fetcher:valid})).provider,'gemini');
+  // Overloaded twice, then answered: the user gets the AI answer.
+  let n=0;
+  const flaky=async(...a)=>(++n<3?{ok:false,status:503}:valid(...a));
+  assert.equal((await researchChat(request,{dataDir,...offline,fetcher:flaky})).provider,'gemini');
+});
+test('a question about a named company uses that company, its move and its filings',async t=>{
+  const dataDir=await sandbox(t);
+  await mkdir(path.join(dataDir,'news-history','announcements'),{recursive:true});
+  await writeFile(path.join(dataDir,'instrument-names.json'),JSON.stringify({names:{AXISBANK:'AXIS BANK LIMITED',ICICIBANK:'ICICI BANK LIMITED'}}));
+  await writeFile(path.join(dataDir,'collection.json'),JSON.stringify({instruments:[{symbol:'AXISBANK'},{symbol:'ICICIBANK'}]}));
+  await writeFile(path.join(dataDir,'news-history','announcements','AXISBANK.json'),JSON.stringify({rows:[
+    {exchdisstime:'19-Oct-2026 17:05:12',desc:'Outcome of Board Meeting',attchmntText:'Axis Bank has submitted financial results for the quarter ended September 30, 2026',attchmntFile:'https://nsearchives.nseindia.com/corporate/x.pdf'},
+    {exchdisstime:'18-Oct-2026 10:00:00',desc:'Trading Window',attchmntText:'Closure of trading window'}]}));
+  const previous=process.env.GEMINI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  t.after(()=>{if(previous!==undefined) process.env.GEMINI_API_KEY=previous;});
+  const out=await researchChat({message:'Why did Axis Bank fall 4% today?',symbol:'ICICIBANK',horizon:5},{dataDir,
+    quote:async s=>({source:'live',ltp:1238.5,changePercent:-4.02,previousClose:1290.4,high:1291,low:1232}),
+    nifty:async()=>({source:'live',value:25012.3,changePercent:-0.41}),now:new Date('2026-10-19T20:00:00+05:30')});
+  assert.ok(out.evidence.some(e=>e.id==='price-AXISBANK'));
+  assert.ok(out.evidence.some(e=>e.id==='market-today'));
+  const filings=out.evidence.filter(e=>e.type==='company_filing');
+  assert.equal(filings.length,1);
+  assert.match(out.reply,/AXISBANK/);
+  assert.match(out.reply,/-4\.02%/);
+  assert.match(out.reply,/Outcome of Board Meeting/);
 });
 test('volatility risk artifacts from different model versions are withheld',async t=>{
   const dataDir=await sandbox(t);
