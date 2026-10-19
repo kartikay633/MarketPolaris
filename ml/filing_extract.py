@@ -25,7 +25,8 @@ from ml.filing_pilot import filing_dir
 from ml.pulse import atomic_json, utcnow
 
 OLLAMA = "http://localhost:11434/api/chat"
-CONTEXT = 4096         # with one Ollama slot this keeps the 4B model fully on a 4 GB GPU
+CONTEXT = 4096         # with one Ollama slot
+GPU_LAYERS = 20        # leaves VRAM headroom on a 4 GB GPU; more layers spilled into system RAM and froze the laptop
 FULL_TEXT = 7000       # characters: shorter filings are read whole
 COVER = 2500           # characters of the first page always kept
 BUDGET = 7000          # characters sent for longer filings
@@ -43,12 +44,12 @@ SCHEMA = {
         "event_type": {"type": "string", "enum": EVENTS},
         "summary": {"type": "string"},
         "headline_missing_material_info": {"type": "boolean"},
-        "facts": {"type": "array", "items": {"type": "object", "properties": {
+        "facts": {"type": "array", "maxItems": 8, "items": {"type": "object", "properties": {
             "fact": {"type": "string"}, "value": {"type": ["string", "null"]}, "quote": {"type": "string"}},
             "required": ["fact", "value", "quote"]}},
         "company_impact": {"type": "string", "enum": ["positive", "negative", "neutral", "unclear"]},
         "materiality": {"type": "string", "enum": ["low", "medium", "high"]},
-        "red_flags": {"type": "array", "items": {"type": "string"}},
+        "red_flags": {"type": "array", "maxItems": 5, "items": {"type": "string"}},
     },
     "required": ["event_type", "summary", "headline_missing_material_info", "facts", "company_impact", "materiality", "red_flags"],
 }
@@ -58,14 +59,44 @@ Use ONLY the filing text provided. Never use outside knowledge, never guess, nev
 - summary: at most two plain sentences on what the filing says.
 - headline_missing_material_info: true only if the filing contains a material fact (an amount, percentage, reason,
   date, counterparty or condition) that the one-line NSE headline does not state.
-- facts: up to 8 of the most important facts. Each has a short description, its value exactly as written in the
-  filing (or null), and "quote": a short exact excerpt (5 to 25 words) copied from the filing that contains it.
+- facts: up to 8 of the most important facts, most important first. Each has "fact" (a description of at most
+  10 words), "value" (only the key amount, percentage, date, name or short phrase, at most 12 words, exactly as
+  written in the filing, or null) and "quote" (an exact excerpt of 5 to 25 words copied from the filing that
+  contains the value). Skip boilerplate such as company descriptions and addresses.
 - company_impact: the direct effect on the company as the filing describes it; "unclear" when the filing does not say.
   This is not a share-price prediction.
 - materiality: low (routine), medium, or high (could change an investor's view of the company).
 - red_flags: short items only when the filing itself states them (for example a resignation citing concerns,
   a penalty, a qualified audit opinion, a default, a rating downgrade). Otherwise an empty list.
 Return JSON only."""
+
+
+def free_ram_gb():
+    """Free physical memory (Windows); None elsewhere."""
+    try:
+        import ctypes
+
+        class Status(ctypes.Structure):
+            _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong), ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong), ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong), ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+        s = Status()
+        s.dwLength = ctypes.sizeof(Status)
+        ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(s))
+        return s.ullAvailPhys / 1024 ** 3
+    except Exception:
+        return None
+
+
+def memory_guard(minimum=1.5, wait=60, give_up=10):
+    """Pause while free RAM is below minimum GB; False after give_up minutes so the run stops cleanly."""
+    for _ in range(give_up):
+        free = free_ram_gb()
+        if free is None or free >= minimum:
+            return True
+        print(f"  low memory ({free:.1f} GB free); pausing {wait}s", flush=True)
+        time.sleep(wait)
+    return False
 
 
 def norm(s):
@@ -104,7 +135,7 @@ def verify(result, text):
 
 
 def ask(model, headline, category, body):
-    payload = {"model": model, "stream": False, "format": SCHEMA, "options": {"temperature": 0, "num_ctx": CONTEXT, "num_predict": 900},
+    payload = {"model": model, "stream": False, "format": SCHEMA, "options": {"temperature": 0, "num_ctx": CONTEXT, "num_predict": 1200, "num_gpu": GPU_LAYERS},
                "messages": [{"role": "system", "content": SYSTEM},
                             {"role": "user", "content": f"NSE category: {category}\nNSE headline: {headline}\n\nFiling text:\n{body}"}]}
     if model.startswith("qwen3"):
@@ -115,7 +146,17 @@ def ask(model, headline, category, body):
     return out["message"]["content"], out.get("prompt_eval_count"), out.get("eval_count")
 
 
+def stay_awake():
+    """Ask Windows not to idle-sleep while this process runs (released when it exits; no setting changes)."""
+    try:
+        import ctypes
+        ctypes.windll.kernel32.SetThreadExecutionState(0x80000000 | 0x00000001)  # ES_CONTINUOUS | ES_SYSTEM_REQUIRED
+    except Exception:
+        pass
+
+
 def run(model, limit=None):
+    stay_awake()
     base = filing_dir() / "pilot"
     sample = json.loads((base / "sample.json").read_text(encoding="utf-8"))["filings"]
     out_dir = base / "extract" / model.replace(":", "_")
@@ -126,6 +167,9 @@ def run(model, limit=None):
         src, dst = base / "text" / f"{name}.txt", out_dir / f"{name}.json"
         if not src.exists() or dst.exists():
             continue
+        if not memory_guard():
+            print("stopping: free memory stayed below 1.5 GB for 10 minutes", flush=True)
+            break
         text = src.read_text(encoding="utf-8")
         record = {"symbol": f["symbol"], "seq": f["seq"], "category": f["category"], "headline": f["headline"], "model": model,
                   "chars": len(text), "sentChars": None, "at": utcnow()}
