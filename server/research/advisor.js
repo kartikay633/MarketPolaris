@@ -60,8 +60,9 @@ async function latestCloses(dataDir, asOf, symbols) {
   return closes;
 }
 
-async function loadSignals(dataDir) {
-  const [rank, risk] = await Promise.all([readJson(path.join(dataDir, 'predictions.json')), readJson(path.join(dataDir, 'risk-predictions.json'))]);
+// riskFile selects which volatility model sizes the plan (the live model by default; AI paper bots may use a shadow model).
+async function loadSignals(dataDir, riskFile = 'risk-predictions.json') {
+  const [rank, risk] = await Promise.all([readJson(path.join(dataDir, 'predictions.json')), readJson(path.join(dataDir, riskFile))]);
   if (!rank?.predictions?.length || !risk?.predictions?.length) throw new Error('Model outlooks are unavailable');
   const riskBy = Object.fromEntries(risk.predictions.map(r => [r.symbol, r]));
   const symbols = [...new Set(rank.predictions.map(p => p.symbol))];
@@ -76,17 +77,17 @@ function forecastVol(r) {
 }
 
 function reasons(p, r) {
-  const out = [`Ranks above ${Math.round(p.peerRankPercentile * 100)}% of covered stocks for the next ${p.horizon} sessions`];
+  const out = [`In the top ${Math.max(1, Math.round((1 - p.peerRankPercentile) * 100))}% of covered stocks for the next ${p.horizon} sessions`];
   const support = (p.drivers || []).filter(d => d.direction === 'supports').slice(0, 2).map(d => d.label.toLowerCase());
   if (support.length) out.push(`Supported by ${support.join(' and ')}`);
   out.push(r.riskTier === 'calm' ? 'Volatility expected to stay calm' : r.riskTier === 'elevated' ? 'Price swings expected to be larger than usual' : 'Volatility expected near normal');
   return out;
 }
 
-export async function buildPlan(body, { dataDir = DATA_DIR, record = false, source = 'user' } = {}) {
+export async function buildPlan(body, { dataDir = DATA_DIR, record = false, source = 'user', riskFile } = {}) {
   const input = validatePlan(body);
   const horizon = HORIZONS[input.horizon], profile = PROFILES[input.risk];
-  const signals = await loadSignals(dataDir);
+  const signals = await loadSignals(dataDir, riskFile);
   const candidates = signals.rank.filter(p => p.horizon === horizon.signal && signals.riskBy[p.symbol])
     .filter(p => profile.elevated !== 'exclude' || signals.riskBy[p.symbol].riskTier !== 'elevated')
     .sort((a, b) => b.probabilityOutperformPeers - a.probabilityOutperformPeers);
@@ -164,10 +165,10 @@ export async function buildPlan(body, { dataDir = DATA_DIR, record = false, sour
 }
 
 // Daily check-up for held positions: buy more, hold, trim or sell, with reasons.
-export async function reviewPortfolio(body, { dataDir = DATA_DIR } = {}) {
+export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile } = {}) {
   const input = validateReview(body);
   const horizon = HORIZONS[input.horizon], profile = PROFILES[input.risk];
-  const signals = await loadSignals(dataDir);
+  const signals = await loadSignals(dataDir, riskFile);
   const bySymbol = Object.fromEntries(signals.rank.filter(p => p.horizon === horizon.signal).map(p => [p.symbol, p]));
   const closes = await latestCloses(dataDir, signals.asOf, signals.symbols);
   const value = p => p.quantity * (p.currentPrice || closes[clean(p.symbol)]?.close || p.avgPrice);

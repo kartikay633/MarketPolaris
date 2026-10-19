@@ -2,6 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { researchStatus, researchChat, validateChat } from '../research/service.js';
 import { buildPlan, reviewPortfolio, validatePlan, validateReview } from '../research/advisor.js';
+import { botSummaries } from '../research/bots.js';
 import { DATA_DIR, readJson } from '../research/marketData.js';
 import path from 'node:path';
 
@@ -28,6 +29,11 @@ router.post('/advisor/review',advisorLimit,async(req,res)=>{
   try {validateReview(req.body);} catch {return res.status(400).json({error:'Portfolio details are invalid.'});}
   try {res.json(await reviewPortfolio(req.body));}
   catch {res.status(503).json({error:'Outlooks are being refreshed. Try again shortly.'});}
+});
+// AI-managed paper accounts: read-only, public, no account data.
+router.get('/bots',async(_req,res)=>{
+  try {res.json({bots:await botSummaries()});}
+  catch {res.status(503).json({error:'AI portfolios are unavailable right now.'});}
 });
 router.get('/advisor/track-record',async(_req,res)=>{
   res.json(await readJson(path.join(DATA_DIR,'reports','advisor-forward.json'),{plans:0,open:0,model:{plans:0},user:{plans:0},byProfile:{}}));

@@ -38,7 +38,9 @@ for(let attempt=1;attempt<=3;attempt++) {
 steps.forward=await run('forward');
 // Planner forward test: record today's model portfolios only from fresh outlooks; always score matured ones.
 steps.advisor=await run(steps.update===0?'all':'score','scripts/pulse-advisor.js');
-const ok=steps.update===0&&steps.forward===0&&steps.advisor===0;
+// AI paper accounts trade only on fresh outlooks.
+if(steps.update===0) steps.bots=await run('step','scripts/pulse-bots.js');
+const ok=steps.update===0&&steps.forward===0&&steps.advisor===0&&(steps.bots??0)===0;
 const status={startedAt,finishedAt:new Date().toISOString(),status:ok?'ok':'failed',steps};
 await mkdir(path.join(dataDir,'reports'),{recursive:true});
 const target=path.join(dataDir,'reports/daily-run.json');
