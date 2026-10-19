@@ -65,6 +65,9 @@ const realOverview = {
 const gainers = [{ symbol: 'NSE:TECHM', name: 'TECH MAHINDRA LIMITED', ltp: 1790, changePercent: 8.48 }];
 const losers = [{ symbol: 'NSE:IPCALAB', name: 'IPCA LABORATORIES LIMITED', ltp: 1300.5, changePercent: -4.21 }];
 
+// The fixtures describe the completed 16 Oct session, so tests fix the market as closed
+// rather than reading the wall clock.
+const closedHours = { isMarketOpen: () => false, getMarketStatus: () => ({ status: 'CLOSED', reason: 'Weekend' }) };
 const marketStub = (overview, g = [], l = []) => ({
   getOverview: async () => overview,
   getGainers: async () => g,
@@ -74,7 +77,7 @@ const marketStub = (overview, g = [], l = []) => ({
 // ── Pulse AI brief ──────────────────────────────────────────────────────────
 
 test('with every overview block unavailable the brief states no figures at all', async () => {
-  const ai = new AIService({ market: marketStub(unavailableOverview), cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market: marketStub(unavailableOverview), cache: new NodeCache() });
   ai.apiKey = '';
   const brief = await ai.generateMarketSummary();
 
@@ -90,7 +93,7 @@ test('with every overview block unavailable the brief states no figures at all',
 
 test('the overview failing entirely also yields a figure-free brief', async () => {
   const market = { getOverview: async () => { throw new Error('down'); }, getGainers: async () => [], getLosers: async () => [] };
-  const ai = new AIService({ market, cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market, cache: new NodeCache() });
   ai.apiKey = '';
   const brief = await ai.generateMarketSummary();
   assertNoInvented(brief);
@@ -98,7 +101,7 @@ test('the overview failing entirely also yields a figure-free brief', async () =
 });
 
 test('every figure in the brief comes from the overview and movers', async () => {
-  const ai = new AIService({ market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
   ai.apiKey = '';
   const brief = await ai.generateMarketSummary();
   assertNoInvented(brief);
@@ -142,7 +145,7 @@ test('a Gemini brief citing figures outside the data is discarded', async t => {
       summary: 'Strong session.', keyDrivers: [], sectorOutlook: '', marketStance: 'Bullish Momentum',
     }) }] } }] },
   }));
-  const ai = new AIService({ market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
   ai.apiKey = 'test-key';
   const brief = await ai.generateMarketSummary();
   assertNoInvented(brief);
@@ -157,7 +160,7 @@ test('a Gemini brief that sticks to the data is used', async t => {
       keyDrivers: ['Nifty IT led with +3.92%'], sectorOutlook: 'IT led, FMCG lagged.', marketStance: 'Consolidation',
     }) }] } }] },
   }));
-  const ai = new AIService({ market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
   ai.apiKey = 'test-key';
   const brief = await ai.generateMarketSummary();
   assert.equal(brief.headline, 'NIFTY 50 ends at 23,146.15, up 0.65%');
@@ -165,7 +168,7 @@ test('a Gemini brief that sticks to the data is used', async t => {
 });
 
 test('the chat market wrap uses the same real brief', async () => {
-  const ai = new AIService({ market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
+  const ai = new AIService({ hours: closedHours, market: marketStub(realOverview, gainers, losers), cache: new NodeCache() });
   const reply = ai._generateSmartReply('what happened after market hours?', null, null, await ai.assembleMarketContext());
   assertNoInvented(reply);
   assert.match(reply, /23,146\.15/);

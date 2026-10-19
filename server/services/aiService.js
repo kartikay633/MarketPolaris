@@ -474,8 +474,10 @@ export function historicalStudyFrom({ symbol, name = null, saved, benchmark = nu
 }
 
 export class AIService {
-  constructor({ market = marketDataService, news = newsService, cache = aiCache, dataDir = path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse') } = {}) {
+  // hours is injectable so tests can fix the market session instead of reading the clock.
+  constructor({ market = marketDataService, news = newsService, cache = aiCache, dataDir = path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse'), hours = { isMarketOpen, getMarketStatus } } = {}) {
     this.market = market;
+    this.hours = hours;
     this.news = news;
     this.cache = cache;
     this.dataDir = dataDir;
@@ -491,10 +493,10 @@ export class AIService {
         this.market.getGainers(8).catch(() => []),
         this.market.getLosers(8).catch(() => []),
       ]);
-      return marketContextFrom({ overview, gainers, losers, status: getMarketStatus(), isOpen: isMarketOpen() });
+      return marketContextFrom({ overview, gainers, losers, status: this.hours.getMarketStatus(), isOpen: this.hours.isMarketOpen() });
     } catch (err) {
       logger.warn({ err: err.message }, 'Failed to assemble complete market context');
-      return marketContextFrom({ isOpen: isMarketOpen() });
+      return marketContextFrom({ isOpen: this.hours.isMarketOpen() });
     }
   }
 
