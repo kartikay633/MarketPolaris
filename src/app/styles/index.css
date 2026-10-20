@@ -2432,6 +2432,7 @@ h1, h2, h3 { text-wrap: balance; }
 .tab-pill--positive { background: var(--positive-muted); color: var(--positive); border-color: var(--positive-border); box-shadow: none; }
 .tab-pill--negative { background: var(--negative-muted); color: var(--negative); border-color: var(--negative-border); box-shadow: none; }
 .input, .select { background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 9px 12px; font-size: 12px; min-height: 36px; }
+.input.input--with-icon { padding-left: 38px; } /* the shorthand above would otherwise put text under the icon */
 .form-label { color: var(--text-secondary); font-size: 11px; font-weight: 500; }
 .table-header, .data-table thead tr { background: var(--background); color: var(--text-muted); border-bottom: 1px solid var(--border); }
 .data-table { width: 100%; font-size: 12px; }
