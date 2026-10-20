@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 11 — Virtual Paper Trading Portfolio Page
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePortfolio, useResetPortfolio, useAddFunds } from '../hooks/useTrade';

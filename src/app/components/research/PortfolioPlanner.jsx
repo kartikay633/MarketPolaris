@@ -77,7 +77,7 @@ export default function PortfolioPlanner({ onDiscuss }) {
   const scored = record.data?.model?.plans || 0;
   return <div className="pr-content">
     <section className="pr-panel">
-      <header className="pr-panel-heading"><div><h2>Plan my portfolio</h2><p>Tell Pulse AI your budget and timeline. It builds a diversified paper portfolio sized to each stock’s expected risk.</p></div></header>
+      <header className="pr-panel-heading"><div><h2>Plan my portfolio</h2><p>Tell Polaris AI your budget and timeline. It builds a diversified paper portfolio sized to each stock’s expected risk.</p></div></header>
       <div className="pr-panel-body pr-planner-form">
         <label className="pr-field"><span>How much do you want to invest?</span>
           <div className="pr-budget"><b>₹</b><input inputMode="numeric" aria-label="Investment amount in rupees" value={budget ? budget.toLocaleString('en-IN') : ''} onChange={e => setBudgetText(e.target.value)} onBlur={() => budgetValid && setProfile(v => ({ ...v, budget }))} /></div>
@@ -97,7 +97,7 @@ export default function PortfolioPlanner({ onDiscuss }) {
 
     {p && <section className="pr-panel">
       <header className="pr-panel-heading"><div><h2>Your {p.horizon.toLowerCase()} {p.profile.toLowerCase()} plan</h2><p>Prices as of {date(p.asOf)} close · {p.holdings.length} holdings across {p.risk.sectors} sectors</p></div>
-        <div className="pr-actions"><button type="button" className="btn btn-primary" disabled={placing} onClick={placePlan}><CheckCircle2 size={15} />{placing ? 'Placing orders…' : 'Place paper orders'}</button>{onDiscuss && <button type="button" className="btn btn-secondary" onClick={() => onDiscuss(`I am considering this ${p.horizon} ${p.profile} paper plan of ${inr(p.input.budget)}: ${p.holdings.map(h => `${h.symbol} ${pct(h.weight, 0)}`).join(', ')}. Explain the main risks and what could go wrong.`)}>Discuss with Pulse AI</button>}</div></header>
+        <div className="pr-actions"><button type="button" className="btn btn-primary" disabled={placing} onClick={placePlan}><CheckCircle2 size={15} />{placing ? 'Placing orders…' : 'Place paper orders'}</button>{onDiscuss && <button type="button" className="btn btn-secondary" onClick={() => onDiscuss(`I am considering this ${p.horizon} ${p.profile} paper plan of ${inr(p.input.budget)}: ${p.holdings.map(h => `${h.symbol} ${pct(h.weight, 0)}`).join(', ')}. Explain the main risks and what could go wrong.`)}>Discuss with Polaris AI</button>}</div></header>
       <div className="pr-metrics pr-panel-body">
         <Metric label="Invested" value={inr(p.invested)} detail={`${pct(p.invested / p.input.budget, 0)} of your budget`} />
         <Metric label="Kept in cash" value={inr(p.cash)} detail="Buffer for dips and rebalancing" />
@@ -110,7 +110,7 @@ export default function PortfolioPlanner({ onDiscuss }) {
     </section>}
 
     <section className="pr-panel">
-      <header className="pr-panel-heading"><div><h2>Daily check-up</h2><p>What Pulse AI would do with your paper holdings today, using your {RISKS.find(r => r[0] === profile.risk)[1].toLowerCase()} {HORIZONS.find(h => h[0] === profile.horizon)[1]} profile</p></div>
+      <header className="pr-panel-heading"><div><h2>Daily check-up</h2><p>What Polaris AI would do with your paper holdings today, using your {RISKS.find(r => r[0] === profile.risk)[1].toLowerCase()} {HORIZONS.find(h => h[0] === profile.horizon)[1]} profile</p></div>
         <div className="pr-actions"><button type="button" className="btn btn-secondary" disabled={review.isFetching} onClick={() => review.refetch()}><RefreshCw size={14} className={review.isFetching ? 'pr-spinning' : ''} />Refresh</button><Link className="btn btn-secondary" to="/portfolio">Open portfolio<ArrowUpRight size={14} /></Link></div></header>
       {!reviewInput.positions.length ? <div className="pr-empty"><ShieldCheck size={24} /><h3>No paper holdings yet</h3><p>Build a plan and place paper orders. Your check-up appears here every day after the market close update.</p></div>
         : review.isPending ? <div className="pr-loading pr-panel-body" role="status">Checking your holdings…</div>
@@ -124,13 +124,13 @@ export default function PortfolioPlanner({ onDiscuss }) {
     </section>
 
     <section className="pr-panel">
-      <header className="pr-panel-heading"><div><h2>Track record</h2><p>Every evening Pulse AI records model portfolios for each risk style and timeline, then scores them against NIFTY 50 when they mature. Records are never edited.</p></div></header>
+      <header className="pr-panel-heading"><div><h2>Track record</h2><p>Every evening Polaris AI records model portfolios for each risk style and timeline, then scores them against NIFTY 50 when they mature. Records are never edited.</p></div></header>
       <div className="pr-metrics pr-panel-body">{scored > 0 ? <>
         <Metric label="Matured model portfolios" value={scored} />
         <Metric label="Beat NIFTY 50" value={pct(record.data.model.beatNiftyRate)} detail="Share of matured portfolios" />
         <Metric label="Average excess return" value={pct(record.data.model.meanExcessReturn, 2)} detail="Versus NIFTY 50, same dates" />
       </> : <Metric label="Portfolios being tracked" value={record.data?.plans ?? '—'} detail="The first one-week results arrive about a week after tracking began" />}</div>
     </section>
-    <p className="pr-small">Paper trading only. Pulse AI provides model-based research to support your own decisions; it is not investment advice.</p>
+    <p className="pr-small">Paper trading only. Polaris AI provides model-based research to support your own decisions; it is not investment advice.</p>
   </div>;
 }

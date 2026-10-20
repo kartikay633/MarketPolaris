@@ -74,7 +74,7 @@ const marketStub = (overview, g = [], l = []) => ({
   getLosers: async () => l,
 });
 
-// ── Pulse AI brief ──────────────────────────────────────────────────────────
+// ── Polaris AI brief ──────────────────────────────────────────────────────────
 
 test('with every overview block unavailable the brief states no figures at all', async () => {
   const ai = new AIService({ hours: closedHours, market: marketStub(unavailableOverview), cache: new NodeCache() });

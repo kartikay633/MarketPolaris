@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 — Empty State & Error Boundary
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React from 'react';
 import { AlertTriangle, Inbox, RefreshCw } from 'lucide-react';
 

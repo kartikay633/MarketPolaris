@@ -1,4 +1,4 @@
-// Flagship Floating Pulse AI Quantitative Assistant Widget
+// Flagship Floating Polaris AI Quantitative Assistant Widget
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAIChat } from '../../hooks/useAI';
@@ -103,12 +103,12 @@ export function FloatingAIWidget() {
           onClick={() => setIsOpen(true)}
           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsOpen(true); }}
           className="floating-ai-trigger"
-          title="Open Pulse AI Financial Intelligence"
+          title="Open Polaris AI Financial Intelligence"
         >
           <div className="floating-ai-orb-wrapper">
             <img
               src="/pulse_ai_core.jpg"
-              alt="Pulse AI Intelligence Core"
+              alt="Polaris AI Intelligence Core"
               className="floating-ai-orb-img"
             />
             <span className="floating-ai-glow-ring" />
@@ -116,7 +116,7 @@ export function FloatingAIWidget() {
           <div className="floating-ai-label-pill">
             <Sparkles size={13} color="#60A5FA" />
             <span style={{ fontSize: '11px', fontWeight: 700, letterSpacing: '0.04em' }}>
-              PULSE AI
+              POLARIS AI
             </span>
           </div>
         </div>
@@ -130,7 +130,7 @@ export function FloatingAIWidget() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <img
                 src="/pulse_ai_core.jpg"
-                alt="Pulse AI Core"
+                alt="Polaris AI Core"
                 style={{
                   width: '32px',
                   height: '32px',
@@ -143,7 +143,7 @@ export function FloatingAIWidget() {
               <div style={{ display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    Pulse AI Intelligence
+                    Polaris AI Intelligence
                   </span>
                   <span
                     style={{
@@ -206,7 +206,7 @@ export function FloatingAIWidget() {
                     }}
                   />
                   <div style={{ fontSize: '13.5px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    How can Pulse AI assist your portfolio?
+                    How can Polaris AI assist your portfolio?
                   </div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
                     Ask about NSE / BSE tickers, volatility regimes, or institutional flow.

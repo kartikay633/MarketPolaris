@@ -1,12 +1,12 @@
 /**
- * MARKET PULSE — 3D Financial Data Universe & Cinematic Intro
+ * MARKET POLARIS — 3D Financial Data Universe & Cinematic Intro
  * 
  * 0.0–0.6s:  Genesis — Multi-depth financial cosmos awakens (#020508)
  * 0.6–3.4s:  Deep High-Speed Star Travel — Fast, immersive flight through vast 3D starfield tunnel
  * 2.4–3.4s:  Smooth Progressive Deceleration — Flight eases seamlessly into focal station
  * 2.8–4.2s:  Authoritative Brand Solidification — 100% clean, razor-sharp vector M/P & rising blue arrow (ZERO dotted lines)
  * 4.2–4.7s:  Tactile Micro-Settle & ambient backlight bloom
- * 4.4–5.4s:  MARKET PULSE wordmark reveal with typography tracking
+ * 4.4–5.4s:  MARKET POLARIS wordmark reveal with typography tracking
  * 5.2–6.4s:  High-frequency data pulse races through the blue market arrow
  * 6.4s+:     Living interactive universe with fluid spring mouse parallax
  */

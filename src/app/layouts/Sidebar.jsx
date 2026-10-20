@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { name: 'Portfolio', path: '/portfolio' },
   { name: 'Trade', path: '/trade' },
   { name: 'News', path: '/news' },
-  { name: 'Pulse AI', path: '/ai', tag: 'AI' },
+  { name: 'Polaris AI', path: '/ai', tag: 'AI' },
   { name: 'Alerts', path: '/alerts' },
   { name: 'Settings', path: '/settings' },
 ];
@@ -18,9 +18,9 @@ const NAV_ITEMS = [
 export function Sidebar() {
   return (
     <>
-      <Link to="/dashboard" className="fd-brand" aria-label="Market Pulse overview">
+      <Link to="/dashboard" className="fd-brand" aria-label="Market Polaris overview">
         <BrandMark className="fd-brand-mark" />
-        <span className="fd-brand-word">MARKET PULSE</span>
+        <span className="fd-brand-word">MARKET POLARIS</span>
       </Link>
 
       <nav className="fd-nav" aria-label="Main navigation">

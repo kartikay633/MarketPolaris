@@ -229,7 +229,7 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        {/* ── Post-market brief: headline and summary, full analysis in Pulse AI ── */}
+        {/* ── Post-market brief: headline and summary, full analysis in Polaris AI ── */}
         <MarketBriefTeaser />
 
         {/* ── Command strip: other benchmarks + paper capital ── */}
@@ -282,7 +282,7 @@ export default function DashboardPage() {
         <nav className="fd-routes fd-wrap" aria-label="Quick routes">
           <Link to="/trade" className="fd-route">Paper trading <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
           <Link to="/markets" className="fd-route">Screener &amp; heatmap <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
-          <Link to="/ai" className="fd-route">Pulse AI research <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
+          <Link to="/ai" className="fd-route">Polaris AI research <span className="fd-route-arrow" aria-hidden="true">→</span></Link>
         </nav>
         </div>
 

@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 9 — NewsFeed Component
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import NewsCard from './NewsCard';
 import { Skeleton } from '../common/LoadingSkeleton';

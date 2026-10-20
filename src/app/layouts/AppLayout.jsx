@@ -24,7 +24,7 @@ export default function AppLayout() {
         </main>
       </div>
 
-      {/* Flagship Floating Pulse AI Assistant */}
+      {/* Flagship Floating Polaris AI Assistant */}
       <FloatingAIWidget />
     </div>
   );

@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 9 — Financial News Page
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import { useMarketNews } from '../hooks/useNews';
 import NewsFeed from '../components/news/NewsFeed';

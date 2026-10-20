@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 8 — StockChart (TradingView Lightweight Charts v5)
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useEffect, useRef, useState, useMemo } from 'react';
 import {
   createChart,

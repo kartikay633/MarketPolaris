@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — UI Controller
+ * MARKET POLARIS — UI Controller
  * Manages all DOM overlay elements:
  * start prompt, progress ticker, brand reveal, corner marks, data readout
  */

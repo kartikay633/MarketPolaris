@@ -27,7 +27,7 @@ export default function LoginPage() {
     try {
       const res = await login(email, password);
       if (res.success) {
-        toast.success('Welcome back to Market Pulse');
+        toast.success('Welcome back to Market Polaris');
         navigate('/dashboard');
       } else {
         setErrorMessage(res.error || 'Invalid credentials');
@@ -155,7 +155,7 @@ export default function LoginPage() {
 
       {/* Switch to Signup */}
       <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12.5px', color: 'var(--text-muted)' }}>
-        New to Market Pulse?{' '}
+        New to Market Polaris?{' '}
         <Link to="/signup" style={{ color: 'var(--accent)', fontWeight: 600 }}>
           Create an account
         </Link>

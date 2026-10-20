@@ -5,7 +5,7 @@ const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://xkrswdqptfgqqi
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Market Pulse: Supabase URL or Anon Key is missing. Check your .env configuration.');
+  console.warn('Market Polaris: Supabase URL or Anon Key is missing. Check your .env configuration.');
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {

@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 16 — SearchModal Component
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -290,7 +290,7 @@ export default function SearchModal({ isOpen, onClose }) {
           }}
         >
           <span>Use ↑ and ↓ to navigate, Enter to select</span>
-          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Market Pulse Search</span>
+          <span style={{ color: 'var(--accent)', fontWeight: 600 }}>Market Polaris Search</span>
         </div>
       </div>
     </div>

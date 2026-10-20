@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Grid Floor
+ * MARKET POLARIS — Grid Floor
  * Subtle infinite grid that anchors the 3D space
  * Pulses with energy during convergence
  */

@@ -1,5 +1,5 @@
 /* ============================================================
-   MARKET PULSE — FLIGHT DECK
+   MARKET POLARIS — FLIGHT DECK
    Loaded after index.css. Continues the 3D intro's world:
    deep-space ground, white instrument type, one electric blue.
    Ruled panes instead of floating cards; numbers in mono.
@@ -556,7 +556,7 @@ input:focus, select:focus, textarea:focus, .input:focus, .select:focus { border-
 /* Section titles outrank the legacy compact dashboard heading rule */
 .dashboard-page h2.fd-h2 { font-family: var(--font-display); font-size: clamp(26px, 2.4vw, 34px) !important; font-weight: 300 !important; letter-spacing: -0.01em !important; }
 
-/* ─── Pulse AI research desk ───────────────────────────── */
+/* ─── Polaris AI research desk ───────────────────────────── */
 .pulse-research { max-width: 1600px; margin: 0 auto; padding: 0 0 40px; gap: 22px; }
 .pulse-research .pr-eyebrow { font-family: var(--font-mono); font-size: 10.5px; font-weight: 400; letter-spacing: 0.2em; color: var(--accent-bright); }
 .pulse-research .pr-heading { padding-bottom: 26px; border-bottom: 1px solid var(--border); }

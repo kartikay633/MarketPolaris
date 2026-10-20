@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Heartbeat Line
+ * MARKET POLARIS — Heartbeat Line
  * The first visual element: a luminous pulse line
  * that traces a market-chart-like heartbeat across the void
  */

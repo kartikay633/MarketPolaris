@@ -46,11 +46,11 @@ export default function IntroPage() {
       {/* Wordmark overlay */}
       <div id="wordmark" className="wordmark">
         <span className="wordmark-market">MARKET</span>
-        <span className="wordmark-pulse">PULSE</span>
+        <span className="wordmark-pulse">POLARIS</span>
       </div>
 
       {/* Subtitle */}
-      <div id="subtitle" className="subtitle">FINANCIAL ANALYTICS PLATFORM</div>
+      <div id="subtitle" className="subtitle">A GUIDE YOU CAN TRUST IN THE MARKET</div>
 
       {/* Vignette */}
       <div className="vignette"></div>

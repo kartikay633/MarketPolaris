@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Audio Engine
+ * MARKET POLARIS — Audio Engine
  * Synthetic sound design using Web Audio API
  * Produces cinematic impacts, tones, and ambient atmosphere
  */

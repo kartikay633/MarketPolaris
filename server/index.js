@@ -112,7 +112,7 @@ async function start() {
   }
 
   app.listen(PORT, () => {
-    logger.info(`Market Pulse API server running on port ${PORT}`);
+    logger.info(`Market Polaris API server running on port ${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Market status: ${getMarketStatus().status}`);
   });

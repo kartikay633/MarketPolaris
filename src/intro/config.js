@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — THE LIVING MARKET
+ * MARKET POLARIS — THE LIVING MARKET
  * Configuration tokens for the cinematic 3D intro
  */
 export const CONFIG = {

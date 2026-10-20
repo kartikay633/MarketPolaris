@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 11 — Paper Trade Terminal Component
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState, useEffect, useRef } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useStockQuote } from '../hooks/useMarketData';

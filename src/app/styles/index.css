@@ -1,5 +1,5 @@
 /* ============================================================
-   MARKET PULSE — Institutional Financial Terminal Design System
+   MARKET POLARIS — Institutional Financial Terminal Design System
    Pure OLED Black Architecture, Electric Blue Brand Accents,
    High-Contrast Typography, Glassmorphism & Layered Depth
    ============================================================ */
@@ -1759,7 +1759,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ============================================================
-   FLAGSHIP FLOATING PULSE AI ASSISTANT
+   FLAGSHIP FLOATING POLARIS AI ASSISTANT
    ============================================================ */
 @keyframes floatBob {
   0%, 100% { transform: translateY(0); }
@@ -2231,7 +2231,7 @@ input:focus, select:focus, textarea:focus {
 
 
 
-/* Market Pulse terminal system. Semantic tokens apply to every existing route. */
+/* Market Polaris terminal system. Semantic tokens apply to every existing route. */
 :root {
   color-scheme: dark;
   --background: #10151e;

@@ -12,9 +12,9 @@ export default function AuthLayout() {
       </div>
 
       <div className="auth-brand">
-        <Link to="/" className="auth-brand-link fd-brand" aria-label="Market Pulse home">
+        <Link to="/" className="auth-brand-link fd-brand" aria-label="Market Polaris home">
           <BrandMark className="fd-brand-mark" />
-          <span className="fd-brand-word">MARKET PULSE</span>
+          <span className="fd-brand-word">MARKET POLARIS</span>
         </Link>
         <p className="auth-subtitle fd-lbl">Indian equities analytics &amp; intelligence</p>
       </div>

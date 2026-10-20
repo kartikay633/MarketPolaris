@@ -369,7 +369,7 @@ export function stockInsightFrom({ symbol, quote = null, history = null, news = 
       ...base,
       available: false,
       sentiment: 'neutral',
-      summary: `Market data for ${sym} is unavailable right now, so Pulse AI has no insight to show. Please check again shortly.`,
+      summary: `Market data for ${sym} is unavailable right now, so Polaris AI has no insight to show. Please check again shortly.`,
       keyFactors: [],
       technicalNote: null,
       catalyst: null,
@@ -547,7 +547,7 @@ export class AIService {
     // figure the context does not contain is discarded in favour of the deterministic brief.
     if (context.indices?.length && this.apiKey && this.apiKey !== 'your-gemini-api-key') {
       try {
-        const prompt = `You are Pulse AI, the market brief writer for Market Pulse (Indian equities, NSE/BSE).
+        const prompt = `You are Polaris AI, the market brief writer for Market Polaris (Indian equities, NSE/BSE).
 Write a concise market brief using ONLY the data below. Every number you write must appear in the data.
 Do not mention corporate events, orders, approvals, policy decisions, macro figures, forecasts,
 support/resistance levels or anything else the data does not contain. If a field is missing, leave it out.
@@ -619,7 +619,7 @@ Respond in JSON with exactly these keys:
     // the context does not contain is discarded. The catalyst stays a real, linked headline.
     if (this.apiKey && this.apiKey !== 'your-gemini-api-key') {
       try {
-        const prompt = `You are Pulse AI, an equity research writer for Indian equities.
+        const prompt = `You are Polaris AI, an equity research writer for Indian equities.
 Describe ${cleanSym} using ONLY the data below. Every number you write must appear in the data.
 Do not mention support or resistance levels, forecasts, corporate events, sector themes or
 anything else the data does not contain. Never recommend buying or selling.
@@ -683,7 +683,7 @@ Respond in JSON with exactly these keys:
     // Attempt Gemini call
     if (this.apiKey && this.apiKey !== 'your-gemini-api-key') {
       try {
-        const prompt = `You are Pulse AI, the intelligent market co-pilot of Market Pulse for the Indian stock market.
+        const prompt = `You are Polaris AI, the intelligent market co-pilot of Market Polaris for the Indian stock market.
 User query: "${userMsg}"
 Market Context: ${JSON.stringify(marketContext)}
 Stock Context: ${JSON.stringify(stockContext)}
@@ -754,7 +754,7 @@ ${insight.summary}`;
       if (insight.keyFactors.length) lines.push('', '#### Key Data Points', ...insight.keyFactors.map((f) => `- ${f}`));
       if (insight.technicalNote) lines.push('', insight.technicalNote);
       if (insight.sources.news) lines.push('', `**Latest headline** (${dayOf(insight.sources.news.publishedAt.slice(0, 10))}): [${insight.sources.news.title}](${insight.sources.news.url})`);
-      lines.push('', '*Pulse AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*');
+      lines.push('', '*Polaris AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*');
       return lines.join('\n');
     }
 
@@ -775,11 +775,11 @@ Exchange data for the brief is not available right now. Please check again short
         const p = brief.levels.pivots;
         lines.push('', `#### Classic Pivots (${p.basis})`, `- Pivot ${p.pivot} · Support ${p.support} · Resistance ${p.resistance}`);
       }
-      lines.push('', '*Pulse AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*');
+      lines.push('', '*Polaris AI provides data-grounded insights for analytical and educational purposes only, not financial or investment advice.*');
       return lines.join('\n');
     }
 
-    return `### Pulse AI Assistant
+    return `### Polaris AI Assistant
 
 I am your co-pilot for the Indian stock market. I read NSE & BSE quotes, market breadth, institutional flows and the NIFTY option chain.
 

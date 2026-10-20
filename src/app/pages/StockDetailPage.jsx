@@ -1,5 +1,5 @@
 // ROADMAP: Section 5, 8 & Phase 3 — StockDetailPage Component
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useStockQuote, useCandleHistory } from '../../app/hooks/useStockData';
@@ -380,7 +380,7 @@ export default function StockDetailPage() {
 
       {/* Two Column Section: AI Synthesis & Related News */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '16px', alignItems: 'start' }}>
-        {/* Pulse AI Insights Panel */}
+        {/* Polaris AI Insights Panel */}
         <AIInsightPanel symbol={quote.symbol} />
 
         {/* Latest Stock News & Catalysts */}

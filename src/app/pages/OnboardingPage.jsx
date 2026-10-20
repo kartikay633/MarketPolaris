@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & Phase 1 — Onboarding Flow
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
@@ -70,7 +70,7 @@ export default function OnboardingPage() {
       });
 
       if (res.success) {
-        toast.success('Market Pulse configured for your terminal');
+        toast.success('Market Polaris configured for your terminal');
         navigate('/dashboard');
       } else {
         toast.error('Failed to save preferences');
@@ -242,7 +242,7 @@ export default function OnboardingPage() {
                     <span>Configuring Terminal...</span>
                   </>
                 ) : (
-                  <span>Launch Market Pulse Terminal</span>
+                  <span>Launch Market Polaris Terminal</span>
                 )}
               </button>
             </div>

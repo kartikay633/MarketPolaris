@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 & 12 — Price Alerts Management Page
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAlerts, useCreateAlert, useDeleteAlert } from '../hooks/useAlerts';

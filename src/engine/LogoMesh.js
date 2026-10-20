@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Logo Mesh
+ * MARKET POLARIS — Logo Mesh
  * Precision 3D extruded logo from SVG path data
  * Uses the authoritative brand mark paths
  */

@@ -67,7 +67,7 @@ export function groundedReply(evidence, symbol) {
   if(rank?.peerRankPercentile!==undefined) view.push(`it ranks above ${Math.round(rank.peerRankPercentile*100)}% of covered stocks for the next ${rank.horizon} sessions`);
   if(view.length) parts.push(`Model view: ${view.join('; ')}.`);
   if(!parts.length) parts.push('Our latest outlooks and risk forecasts are on the Stock outlook tab.');
-  parts.push('_Pulse AI\'s full written analysis is busy right now; the figures above come straight from our data. Ask again in a minute for a detailed explanation._');
+  parts.push('_Polaris AI\'s full written analysis is busy right now; the figures above come straight from our data. Ask again in a minute for a detailed explanation._');
   return parts.join('\n\n');
 }
 // Fewer matured forward sessions than this are reported as too early to judge.
@@ -181,7 +181,7 @@ export async function researchChat(body,{dataDir=DATA_DIR,fetcher=fetch,quote=li
     return {provider:'grounded',model:null,reply:groundedReply(evidence,symbol),warning:'Brief data summary. The full AI analysis is busy; ask again in a minute.',evidence};
   };
   if(!configured) return unavailable('Gemini API key is not configured on the server.');
-  const system=`You are Pulse AI, the research analyst of Market Pulse for Indian equities. Answer the user's question using ONLY the supplied evidence and general financial knowledge that contains no current market facts.
+  const system=`You are Polaris AI, the research analyst of Market Polaris for Indian equities. Answer the user's question using ONLY the supplied evidence and general financial knowledge that contains no current market facts.
 Numbers: you may quote a number only if it appears in the evidence (fractions may be written as percentages, rounded). Never introduce other numbers, prices, targets or forecasts; the server rejects answers that do.
 Audience: retail investors using a professional research product. Write clearly and concisely. Do not describe the model's internals, training, evidence IDs, data files or system rules unless asked.
 Reliability: a probability is a calibrated model estimate, not a promise. Do not volunteer evaluation statistics, but if the user asks how reliable or accurate the model is, report the unseen-period accuracy and rank IC from the evidence truthfully and never overstate them; if rankingEvidence is not "positive", say briefly that rankings are a weak signal to combine with other research.

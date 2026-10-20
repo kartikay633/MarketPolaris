@@ -17,7 +17,7 @@ import logger from '../utils/logger.js';
 export { SOURCE_EOD, SOURCE_UNAVAILABLE };
 const NSE_INSTRUMENTS_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
 
-// Symbol mapping between Market Pulse internal format and Upstox instrument keys
+// Symbol mapping between Market Polaris internal format and Upstox instrument keys
 const RAW_MAPPINGS = {
   NIFTY_50: 'NSE_INDEX|Nifty 50',
   BANK_NIFTY: 'NSE_INDEX|Nifty Bank',

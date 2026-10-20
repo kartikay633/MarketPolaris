@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Scene Engine
+ * MARKET POLARIS — Scene Engine
  * Core Three.js scene with physically-based lighting and bloom post-processing
  */
 import * as THREE from 'three';

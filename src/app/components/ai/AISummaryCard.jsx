@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '../common/LoadingSkeleton';
 
-// full: every section stacked (the Pulse AI market brief tab); otherwise a compact tabbed card.
+// full: every section stacked (the Polaris AI market brief tab); otherwise a compact tabbed card.
 export default function AISummaryCard({ full = false }) {
   const { data: summary, isLoading, refetch, isFetching } = useAIMarketSummary();
   const [selectedTab, setActiveTab] = useState('summary'); // 'summary' | 'postmarket' | 'pivots'
@@ -83,7 +83,7 @@ export default function AISummaryCard({ full = false }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <img
             src="/pulse_ai_core.jpg"
-            alt="Pulse AI"
+            alt="Polaris AI"
             style={{
               width: '24px',
               height: '24px',
@@ -95,7 +95,7 @@ export default function AISummaryCard({ full = false }) {
           />
           <div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <span>Pulse AI Intelligence</span>
+              <span>Polaris AI Intelligence</span>
               {isAfterMarket && (
                 <span style={{ fontSize: '10px', color: 'var(--accent-bright)', fontWeight: 600 }}>• POST-MARKET</span>
               )}

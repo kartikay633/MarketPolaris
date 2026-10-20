@@ -1,4 +1,4 @@
-/* Pulse AI research desk. Uses the shared slate tokens from index.css. */
+/* Polaris AI research desk. Uses the shared slate tokens from index.css. */
 .pulse-research { display: flex; flex-direction: column; gap: 16px; padding: 20px 24px 40px; color: var(--text-primary); }
 .pr-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
 .pr-heading h1 { font-size: 24px; font-weight: 700; margin: 2px 0 4px; }

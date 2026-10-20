@@ -145,7 +145,7 @@ export default function AuthCallbackPage() {
           ESTABLISHING SECURE SESSION
         </p>
         <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0' }}>
-          Verifying Google credentials with Market Pulse terminal...
+          Verifying Google credentials with Market Polaris terminal...
         </p>
       </div>
     </div>

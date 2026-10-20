@@ -11,7 +11,7 @@ router.get('/market-summary', optionalAuth, (req, res, next) => aiController.get
 // GET /api/ai/stock-insight/:symbol — AI Stock Insight for specific ticker
 router.get('/stock-insight/:symbol', optionalAuth, (req, res, next) => aiController.getStockInsight(req, res, next));
 
-// POST /api/ai/chat — Conversational Pulse AI Assistant
+// POST /api/ai/chat — Conversational Polaris AI Assistant
 router.post('/chat', optionalAuth, (req, res, next) => aiController.chat(req, res, next));
 
 // POST /api/ai/agentic-analysis — Autonomous Multi-Agent Quantitative Pipeline with 5-Year Trend ML

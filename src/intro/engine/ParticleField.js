@@ -1,5 +1,5 @@
 /**
- * MARKET PULSE — Particle Field
+ * MARKET POLARIS — Particle Field
  * Intelligent particle system that forms the ambient market data atmosphere
  * Particles flow in structured streams, converge toward center during logo birth
  */

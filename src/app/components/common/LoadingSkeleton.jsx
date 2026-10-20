@@ -1,5 +1,5 @@
 // ROADMAP: Section 5 — Loading Skeleton Component
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React from 'react';
 
 export function Skeleton({ width = '100%', height = '20px', borderRadius = 'var(--radius-sm)', style = {} }) {

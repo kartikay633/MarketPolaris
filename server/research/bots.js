@@ -8,8 +8,8 @@ import { buildPlan, reviewPortfolio } from './advisor.js';
 // writes a post-mortem for every losing exit. Records are append-only.
 
 export const BOTS = [
-  { id: 'pulse-v4', label: 'Pulse AI v4', riskFile: 'risk-predictions.json', description: 'Live models: peer ranking + volatility v4 sizing' },
-  { id: 'pulse-v5', label: 'Pulse AI v5 (shadow)', riskFile: 'risk-predictions-v5.json', description: 'Shadow models under evaluation; starts when v5 forecasts exist' },
+  { id: 'pulse-v4', label: 'Polaris AI v4', riskFile: 'risk-predictions.json', description: 'Live models: peer ranking + volatility v4 sizing' },
+  { id: 'pulse-v5', label: 'Polaris AI v5 (shadow)', riskFile: 'risk-predictions-v5.json', description: 'Shadow models under evaluation; starts when v5 forecasts exist' },
 ];
 export const START_CASH = 200000;
 export const COST = .0012; // per side: brokerage, STT and exchange charges, approximated
@@ -188,7 +188,8 @@ export async function botSummaries(dataDir = DATA_DIR) {
     for (const e of s.equity) { peak = Math.max(peak, e.value); maxDrawdown = Math.min(maxDrawdown, e.value / peak - 1); }
     const closed = s.trades.filter(t => t.side === 'SELL' && t.status === 'filled');
     const niftyStart = first?.nifty, niftyNow = last?.nifty;
-    result.push({ id: s.id, label: s.label, description: s.description, status: 'running', startAsOf: s.startAsOf, asOf: last?.date || s.startAsOf,
+    // Display names come from the code, so a rename reaches accounts that started earlier.
+    result.push({ id: s.id, label: bot.label, description: bot.description, status: 'running', startAsOf: s.startAsOf, asOf: last?.date || s.startAsOf,
       startCash: s.startCash, value, cash: s.cash, returnPct: value / s.startCash - 1,
       niftyReturnPct: niftyStart && niftyNow ? niftyNow / niftyStart - 1 : null, maxDrawdown,
       largestPositionWeight: positions[0]?.weight || 0, positions, pending: s.pending, equity: s.equity,

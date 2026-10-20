@@ -1,5 +1,5 @@
 // ROADMAP: Section 5, Phase 1 & Design Refinement — Institutional Terminal Signup
-// Institutional Terminal Styling — Exact Market Pulse Design System
+// Institutional Terminal Styling — Exact Market Polaris Design System
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { DATA_DIR, atomicJson, readJson } from './marketData.js';
 
-// Pulse AI portfolio planner for paper trading. Candidates come from the peer-ranking
+// Polaris AI portfolio planner for paper trading. Candidates come from the peer-ranking
 // model; position sizes come from the volatility forecast (volatility-managed sizing),
 // which is where the evaluated models are strongest. Every plan uses saved model
 // output only: no prices, outcomes or recommendations are invented.
@@ -186,7 +186,7 @@ export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile } = {
     const symbol = clean(position.symbol), p = bySymbol[symbol], r = signals.riskBy[symbol];
     const price = position.currentPrice || closes[symbol]?.close || position.avgPrice;
     const weight = total > 0 ? value(position) / total : 0;
-    if (!p || !r) return { symbol, action: 'review', quantity: 0, weight, reasons: ['Outside the stocks Pulse AI covers; review it yourself'] };
+    if (!p || !r) return { symbol, action: 'review', quantity: 0, weight, reasons: ['Outside the stocks Polaris AI covers; review it yourself'] };
     const vol = forecastVol(r);
     const floor = position.avgPrice * (1 - Math.min(.35, REVIEW_SIGMAS * vol * Math.sqrt(21 / 252)));
     const why = [];

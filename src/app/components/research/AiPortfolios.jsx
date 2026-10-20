@@ -55,7 +55,7 @@ function BotCard({ bot }) {
 export default function AiPortfolios() {
   const bots = useQuery({ queryKey: ['pulse-bots'], queryFn: async () => (await api.get('/research/bots')).data.bots, staleTime: 60000, refetchInterval: 300000 });
   return <div className="pr-content">
-    <div className="pr-note">Pulse AI trades these paper accounts on its own. Each started with ₹2,00,000 and can never add money. Decisions are made after the evening data update and filled at the next market open, with brokerage and taxes deducted. Paper trading only; not investment advice.</div>
+    <div className="pr-note">Polaris AI trades these paper accounts on its own. Each started with ₹2,00,000 and can never add money. Decisions are made after the evening data update and filled at the next market open, with brokerage and taxes deducted. Paper trading only; not investment advice.</div>
     {bots.isPending && <div className="pr-loading" role="status">Loading AI portfolios…</div>}
     {bots.isError && <div className="pr-note pr-note--error" role="alert">AI portfolios are unavailable right now.</div>}
     {bots.data?.map(bot => <BotCard key={bot.id} bot={bot} />)}
