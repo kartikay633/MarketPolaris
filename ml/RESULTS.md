@@ -1,5 +1,58 @@
 # Pulse research results
 
+## Filing reader, stage 1 pilot: can a local 4B model be trusted? — 21 October 2026 (gate not passed)
+
+Protocol: `ml/FILING_READER_PROTOCOL.md`, stage 1 (committed before any filing was read). Code:
+`ml/filing_pilot.py` (sample, fetch, text), `ml/filing_extract.py` (Qwen3 4B through Ollama, quote
+and number verification) and `ml/filing_grade.py` (grading sheet and score).
+
+**Setup.**
+
+* 100 material NSE filings from 2022 to 2024, drawn once with a fixed seed across 19 categories.
+* 95 PDFs fetched; 5 were over 8 MB and are recorded, not worked around. 3 had no text layer.
+* Qwen3 4B read 91 filings: median 58 seconds each, 95 minutes in total, on an RTX 3050 (4 GB).
+* The automatic check dropped 81 facts (14%) whose quote or numbers did not appear in the filing.
+* **Deviation:** the planned 7B comparison was not run. With 16 GB RAM it pushed the laptop into
+  memory exhaustion. Stage 1 therefore covers the 4B only.
+
+**Grading.** Every one of the 482 kept facts was checked against the filing text:
+
+* correct: the description and value say what the filing says;
+* wrong: wrong number, party or meaning;
+* unsupported: the quote exists, but the fact claims more than the filing does.
+
+| | Result | Gate | |
+|---|---|---|---|
+| Facts correct | **444 / 482 = 92.1%** | ≥ 90% | pass |
+| Facts carrying a number, correct | **262 / 294 = 89.1%** | ≥ 95% | **fail** |
+| Verdicts | 444 correct, 25 unsupported, 13 wrong | | |
+
+**Stage 1 is not passed**, so nothing from the reader is used. Stage 2 does not start on this basis.
+
+**What went wrong.** Almost every miss is a correct number with the wrong label, not an invented
+number. The verifier already blocks invented numbers. The patterns:
+
+* **Period:** nine-month figures presented as the quarter (Britannia); last year's comparison column
+  read as the current one (Kotak).
+* **Scope:** a segment or one airport reported as the whole company (Biocon Generics, GMR Delhi).
+* **Table columns:** opening balances, approval limits or a row's serial number reported as the
+  transaction value (Eicher, HDFC Life, Phoenix, Max Healthcare).
+* **Caps and options reported as fixed amounts:** "up to ₹450 crore", "may invest up to".
+* **Statuses not in the filing:** "resolved", "confirmed", "pending" after a ruling.
+
+**Exploratory split, chosen after seeing the results, so not decisional:**
+
+| Filing type | Facts | Facts correct | Numeric facts | Numbers correct |
+|---|---|---|---|---|
+| Letter-style (orders and penalties, management and auditor changes, ratings, monthly updates, press releases, litigation, acquisitions, clarifications, board outcomes) | 388 | 95.9% | 221 | 95.5% |
+| Table-heavy (related-party tables, investor presentations, financial results, shareholding disclosures, merger schemes) | 94 | 70–82% by type | 73 | 64–77% by type |
+
+**Next, a new pre-registered test, not a re-grade.** Restrict the 4B to letter-style categories.
+Draw a fresh sample of at least 60 filings that the pilot did not read, with a new fixed seed, and
+apply the same gate. Results tables should not go through the LLM at all: quarterly figures are
+already parsed from XBRL (`ml.results_history`), and related-party tables need a table parser,
+not free-text reading.
+
 ## Crisis replay: hold, de-risk or buy the dip? — 20 October 2026 (research, no change)
 
 Protocol committed before any result: `ml/CRISIS_PROTOCOL.md` (b34e441). Code: `ml/crisis_study.py`. No-lookahead
