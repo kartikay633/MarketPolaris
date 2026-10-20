@@ -2,7 +2,7 @@
 // Institutional Terminal Styling — Exact Market Pulse Design System
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useStockQuote, useStockHistory } from '../../app/hooks/useStockData';
+import { useStockQuote, useCandleHistory } from '../../app/hooks/useStockData';
 import { useStockNews } from '../../app/hooks/useNews';
 import { useWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '../hooks/useWatchlist';
 import StockChart from '../components/charts/StockChart';
@@ -32,7 +32,7 @@ export default function StockDetailPage() {
 
   // Fetch stock quote, candles, and stock news
   const { data: quote, isLoading: isQuoteLoading, error: quoteError } = useStockQuote(symbol);
-  const { data: candles, isLoading: isCandlesLoading } = useStockHistory(symbol, timeframe);
+  const history = useCandleHistory(symbol, timeframe);
   const { data: stockNews = [] } = useStockNews(symbol, 4);
 
   // Watchlist integration
@@ -240,10 +240,13 @@ export default function StockDetailPage() {
       <div style={{ marginBottom: '24px' }}>
         <StockChart
           symbol={quote.symbol}
-          candles={candles}
-          isLoading={isCandlesLoading}
+          candles={history.candles}
+          isLoading={history.isLoading}
           selectedTimeframe={timeframe}
           onTimeframeChange={(tf) => setTimeframe(tf)}
+          onLoadOlder={history.loadOlder}
+          isLoadingOlder={history.loadingOlder}
+          historyExhausted={history.exhausted}
         />
       </div>
 

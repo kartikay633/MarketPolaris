@@ -3,18 +3,19 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Activity, ArrowUpRight, BookOpen, Bot, MessageSquare, PieChart, RefreshCw, Search, Send, Wallet, X } from 'lucide-react';
+import { Activity, ArrowUpRight, BookOpen, Bot, MessageSquare, Newspaper, PieChart, RefreshCw, Search, Send, Wallet, X } from 'lucide-react';
 import api from '../services/api';
 import { usePortfolio } from '../hooks/useTrade';
 import CompanyLogo from '../components/common/CompanyLogo';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import PortfolioPlanner from '../components/research/PortfolioPlanner';
 import AiPortfolios from '../components/research/AiPortfolios';
+import AISummaryCard from '../components/ai/AISummaryCard';
 import '../styles/markdown.css';
 import '../styles/pulse-research.css';
 
 // Model evaluation, forward testing and the news ledger run in the backend pipeline and are not shown to customers.
-const tabs = [['planner', 'Plan my portfolio', Wallet], ['opportunities', 'Stock outlook', Activity], ['portfolio', 'Portfolio', PieChart], ['bots', 'AI portfolios', Bot], ['chat', 'Research chat', MessageSquare]];
+const tabs = [['brief', 'Market brief', Newspaper], ['planner', 'Plan my portfolio', Wallet], ['opportunities', 'Stock outlook', Activity], ['portfolio', 'Portfolio', PieChart], ['bots', 'AI portfolios', Bot], ['chat', 'Research chat', MessageSquare]];
 const pct = value => Number.isFinite(value) ? `${(value * 100).toFixed(1)}%` : 'Unavailable';
 const num = (value, digits = 3) => Number.isFinite(value) ? value.toLocaleString('en-IN', { maximumFractionDigits: digits }) : 'Unavailable';
 const date = value => value && Number.isFinite(Date.parse(value)) ? new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'Unavailable';
@@ -30,7 +31,7 @@ const RISK_CLASS = { elevated: 'down', normal: 'uncertain', calm: 'up' };
 
 export default function AIPage() {
   const [params, setParams] = useSearchParams();
-  const [tab, setTab] = useState(params.get('q') ? 'chat' : params.get('symbol') ? 'opportunities' : 'planner');
+  const [tab, setTab] = useState(params.get('q') ? 'chat' : tabs.some(([id]) => id === params.get('tab')) ? params.get('tab') : params.get('symbol') ? 'opportunities' : 'planner');
   const [horizon, setHorizon] = useState(params.get('horizon') === '20' ? 20 : 5);
   const [symbol, setSymbol] = useState(cleanSymbol(params.get('symbol')));
   const [search, setSearch] = useState('');
@@ -90,10 +91,11 @@ export default function AIPage() {
     <header className="pr-heading"><div><div className="pr-eyebrow">MARKET PULSE / RESEARCH</div><h1>Pulse AI</h1><p>AI-ranked outlooks for NSE stocks, with risk context and an analyst you can question.</p></div><button className="btn btn-secondary" type="button" disabled={status.isFetching} onClick={() => status.refetch()}><RefreshCw size={15} className={status.isFetching ? 'pr-spinning' : ''} />Refresh results</button></header>
     <div className="pr-status-strip"><span><i className={predictions.length ? 'pr-status-dot' : 'pr-status-dot pr-status-dot--muted'} />{predictions.length ? 'Outlooks live' : data ? 'Outlooks updating' : 'Connecting'}</span><span>{num(stocks.length, 0)} NSE stocks covered</span><span>Market data as of {date(data?.predictions?.asOf)}</span></div>
     <nav className="pr-tabs" aria-label="Pulse research views">{tabs.map(([id, title, Icon]) => <button key={id} type="button" aria-pressed={tab === id} className={tab === id ? 'is-active' : ''} onClick={() => setTab(id)}><Icon size={16} />{title}</button>)}</nav>
-    {!['planner', 'bots'].includes(tab) && <div className="pr-toolbar"><label>Prediction horizon<select value={horizon} onChange={e => select(symbol, Number(e.target.value))}><option value={5}>5 trading sessions</option><option value={20}>20 trading sessions</option></select></label><label>Research stock<select value={symbol} onChange={e => select(e.target.value)}><option value="">Select stock</option>{symbol && !stocks.some(s => s.symbol === symbol) && <option value={symbol}>{symbol} · outside collection</option>}{stocks.map(s => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}</select></label></div>}
+    {!['brief', 'planner', 'bots'].includes(tab) && <div className="pr-toolbar"><label>Prediction horizon<select value={horizon} onChange={e => select(symbol, Number(e.target.value))}><option value={5}>5 trading sessions</option><option value={20}>20 trading sessions</option></select></label><label>Research stock<select value={symbol} onChange={e => select(e.target.value)}><option value="">Select stock</option>{symbol && !stocks.some(s => s.symbol === symbol) && <option value={symbol}>{symbol} · outside collection</option>}{stocks.map(s => <option key={s.symbol} value={s.symbol}>{s.symbol}</option>)}</select></label></div>}
     {status.isPending && <div className="pr-loading" role="status">Loading outlooks…</div>}
     {status.isError && <Note error>Outlooks could not be loaded right now. Please use Refresh results in a moment.</Note>}
     {data?.stale && predictions.length > 0 && <Note>Outlooks refresh after each market close. Figures below are as of {date(data?.predictions?.asOf)}.</Note>}
+    {tab === 'brief' && <div className="pr-content"><Note>The market brief is built from NSE and Upstox data after each session. It describes the market; it is not investment advice.</Note><AISummaryCard full /></div>}
     {tab === 'planner' && <PortfolioPlanner onDiscuss={text => send(text)} />}
     {tab === 'bots' && <AiPortfolios />}
     {tab === 'opportunities' && <div className="pr-content"><Note>Model-based outlooks for research and paper trading. They are probabilities, not guarantees or investment advice.</Note><div className="pr-outlook-grid"><Panel title="Stock outlook" subtitle={ranked ? `${horizon}-session horizon · ranked by probability of beating peers` : `${horizon}-session horizon · ranked by estimated probability of a positive return`} action={<div className="pr-search"><Search size={15} /><input ref={searchRef} aria-label="Search outlook stocks" placeholder="Find a stock" value={search} onChange={e => setSearch(e.target.value)} />{search && <button type="button" aria-label="Clear stock search" onClick={() => { setSearch(''); searchRef.current?.focus(); }}><X size={15} /></button>}</div>}>

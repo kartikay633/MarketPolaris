@@ -13,6 +13,7 @@ import {
 import { BarChart3, LineChart as LineIcon, Activity, Maximize2 } from 'lucide-react';
 import { formatIndianNumber } from '../../utils/formatters';
 import { useThemeStore } from '../../stores/themeStore';
+import { istCrosshairTime, istTickMark } from './istTime';
 
 const TIMEFRAMES = [
   { id: '1D', label: '1D' },
@@ -35,11 +36,17 @@ export default function StockChart({
   isLoading = false,
   selectedTimeframe = '1D',
   onTimeframeChange,
+  onLoadOlder,
+  isLoadingOlder = false,
+  historyExhausted = false,
 }) {
   const chartContainerRef = useRef(null);
   const chartInstanceRef = useRef(null);
   const mainSeriesRef = useRef(null);
   const volumeSeriesRef = useRef(null);
+  const loadedRef = useRef({ first: null, count: 0, view: null });
+  const onLoadOlderRef = useRef(onLoadOlder);
+  onLoadOlderRef.current = onLoadOlder;
 
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
@@ -103,7 +110,9 @@ export default function StockChart({
         borderColor: isLight ? 'rgba(15, 23, 42, 0.10)' : 'rgba(255, 255, 255, 0.08)',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: istTickMark,
       },
+      localization: { timeFormatter: istCrosshairTime },
       rightPriceScale: {
         borderColor: isLight ? 'rgba(15, 23, 42, 0.10)' : 'rgba(255, 255, 255, 0.08)',
         scaleMargins: {
@@ -155,27 +164,12 @@ export default function StockChart({
     });
 
     volumeSeriesRef.current = volumeSeries;
+    loadedRef.current = { first: null, count: 0, view: null };
 
-    // Set chart data
-    if (candles && candles.length > 0) {
-      const sorted = [...candles].sort((a, b) => a.time - b.time);
-
-      if (chartType === 'candlestick') {
-        mainSeries.setData(sorted);
-      } else {
-        mainSeries.setData(sorted.map((c) => ({ time: c.time, value: c.close })));
-      }
-
-      volumeSeries.setData(
-        sorted.map((c) => ({
-          time: c.time,
-          value: c.volume || 0,
-          color: c.close >= c.open ? 'rgba(16, 185, 129, 0.40)' : 'rgba(244, 63, 94, 0.40)',
-        }))
-      );
-
-      chart.timeScale().fitContent();
-    }
+    // Zooming out or scrolling left to the start of the data asks for an older page.
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (range && range.from < 15) onLoadOlderRef.current?.();
+    });
 
     // Crosshair move subscription for live OHLC inspection
     chart.subscribeCrosshairMove((param) => {
@@ -221,7 +215,30 @@ export default function StockChart({
       chart.remove();
       chartInstanceRef.current = null;
     };
-  }, [candles, chartType, theme, isLight]);
+  }, [chartType, theme, isLight]);
+
+  // Data updates keep the chart (and its zoom). When older candles are prepended, the visible
+  // window shifts by the same number of bars so the view does not jump.
+  useEffect(() => {
+    const chart = chartInstanceRef.current, mainSeries = mainSeriesRef.current, volumeSeries = volumeSeriesRef.current;
+    if (!chart || !mainSeries || !volumeSeries) return;
+    const sorted = [...(candles || [])].sort((a, b) => a.time - b.time);
+    const prev = loadedRef.current;
+    const view = `${symbol}|${selectedTimeframe}|${chartType}`;
+    const range = chart.timeScale().getVisibleLogicalRange();
+    mainSeries.setData(chartType === 'candlestick' ? sorted : sorted.map((c) => ({ time: c.time, value: c.close })));
+    volumeSeries.setData(sorted.map((c) => ({
+      time: c.time,
+      value: c.volume || 0,
+      color: c.close >= c.open ? 'rgba(16, 185, 129, 0.40)' : 'rgba(244, 63, 94, 0.40)',
+    })));
+    if (!sorted.length) return;
+    const prepended = prev.view === view && prev.first !== null && sorted[0].time < prev.first
+      ? sorted.findIndex((c) => c.time === prev.first) : 0;
+    if (prev.view !== view || !prev.count) chart.timeScale().fitContent();
+    else if (prepended > 0 && range) chart.timeScale().setVisibleLogicalRange({ from: range.from + prepended, to: range.to + prepended });
+    loadedRef.current = { first: sorted[0].time, count: sorted.length, view };
+  }, [candles, chartType, theme, symbol, selectedTimeframe]);
 
   const handleFit = () => {
     if (chartInstanceRef.current) {
@@ -443,6 +460,11 @@ export default function StockChart({
           </div>
         )}
 
+        {(isLoadingOlder || historyExhausted) && candles.length > 0 && (
+          <div className="chart-history-note" role="status">
+            {isLoadingOlder ? 'Loading earlier data…' : 'Start of available history'}
+          </div>
+        )}
         <div ref={chartContainerRef} style={{ width: '100%', height: '460px' }} />
       </div>
     </div>

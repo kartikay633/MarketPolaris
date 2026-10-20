@@ -29,6 +29,7 @@ const pageLoaders = {
   TradePage: () => import('./app/pages/TradePage'),
   AlertsPage: () => import('./app/pages/AlertsPage'),
   SettingsPage: () => import('./app/pages/SettingsPage'),
+  InfoPage: () => import('./app/pages/InfoPage'),
 };
 const DashboardPage = lazy(pageLoaders.DashboardPage);
 const MarketsPage = lazy(pageLoaders.MarketsPage);
@@ -40,6 +41,7 @@ const PortfolioPage = lazy(pageLoaders.PortfolioPage);
 const TradePage = lazy(pageLoaders.TradePage);
 const AlertsPage = lazy(pageLoaders.AlertsPage);
 const SettingsPage = lazy(pageLoaders.SettingsPage);
+const InfoPage = lazy(pageLoaders.InfoPage);
 function prefetchPages() {
   const run = () => Object.values(pageLoaders).forEach((load) => load().catch(() => {}));
   if ('requestIdleCallback' in window) window.requestIdleCallback(run, { timeout: 3000 });
@@ -112,6 +114,7 @@ export default function App() {
             {/* Phase 7 Alerts, Settings & Heatmap */}
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/info/:topic" element={<InfoPage />} />
           </Route>
 
           {/* Catch-all */}

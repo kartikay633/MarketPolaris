@@ -90,7 +90,8 @@ export class MarketDataService {
   }
 
   async getHistoricalCandles(symbol, interval, fromDate, toDate) {
-    const cacheKey = `stock:candles:${symbol.toUpperCase()}:${interval}`;
+    // The date range is part of the key: an older page of history must not be served the latest one.
+    const cacheKey = `stock:candles:${symbol.toUpperCase()}:${interval}:${fromDate || ''}:${toDate || ''}`;
     const cached = cache.get(cacheKey);
     if (cached) return cached;
 

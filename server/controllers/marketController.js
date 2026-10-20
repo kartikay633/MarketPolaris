@@ -71,7 +71,10 @@ export class MarketController {
   async getHistory(req, res, next) {
     try {
       const { symbol } = req.params;
-      const { interval, from, to } = req.query;
+      const { interval } = req.query;
+      // Older pages of history are requested by date; anything else is ignored rather than passed to the provider.
+      const day = (v) => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : undefined);
+      const from = day(req.query.from), to = day(req.query.to);
       const candles = await marketDataService.getHistoricalCandles(symbol, interval, from, to);
       res.json({ symbol, interval: interval || 'day', candles });
     } catch (err) {

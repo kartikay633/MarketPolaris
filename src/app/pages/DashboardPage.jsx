@@ -1,31 +1,26 @@
 // Flight Deck dashboard — market overview, paper capital, flows, participation, movers and the wire.
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { useMarketOverview, useGainers, useLosers, useActive, useMarketStocks } from '../hooks/useMarketData';
 import { useMarketNews } from '../hooks/useNews';
 import { usePortfolio, useAddFunds } from '../hooks/useTrade';
-import { useStockHistory } from '../hooks/useStockData';
+import { useCandleHistory } from '../hooks/useStockData';
+import HeroIndexChart from '../components/charts/HeroIndexChart';
 import MarketBreadthBar from '../components/market/MarketBreadthBar';
 import SectorBar from '../components/market/SectorBar';
 import CompanyLogo from '../components/common/CompanyLogo';
-import AISummaryCard from '../components/ai/AISummaryCard';
+import MarketBriefTeaser from '../components/ai/MarketBriefTeaser';
+import SiteFooter from '../components/common/SiteFooter';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import DataStamp from '../components/common/DataStamp';
 import { formatINR, formatNumber, formatVolume, formatCrore } from '../utils/formatters';
 import { TrendingUp, TrendingDown, Activity, Flame, RefreshCw } from 'lucide-react';
 
-const IST_OFFSET_S = 19800;
-const SESSION_OPEN_MIN = 555; // 09:15 IST
-const SESSION_LEN_MIN = 375; // 09:15 → 15:30
-const TRACE_W = 1000;
-const TRACE_H = 236;
-const AXIS_TICKS = ['09:15', '10:30', '11:45', '13:00', '14:15', '15:30'];
 const VIX_MIN = 10;
 const VIX_MAX = 35;
 
-const istDay = (t) => new Date((t + IST_OFFSET_S) * 1000).toISOString().slice(0, 10);
 const signed = (n, digits = 2) => `${n >= 0 ? '+' : '−'}${formatNumber(Math.abs(n), digits)}`;
 const clampPct = (n) => Math.min(100, Math.max(0, n));
 const rangePos = (value, low, high) => (high > low ? clampPct(((value - low) / (high - low)) * 100) : 50);
@@ -60,41 +55,6 @@ function Unavailable({ title, children }) {
       </div>
     </div>
   );
-}
-
-// Builds the intraday trace for the most recent session in the candle history.
-function buildSessionTrace(candles, previousClose) {
-  if (!candles?.length) return null;
-  const sorted = [...candles].filter((c) => Number.isFinite(c?.close)).sort((a, b) => a.time - b.time);
-  if (sorted.length < 2) return null;
-  const lastDay = istDay(sorted[sorted.length - 1].time);
-  const session = sorted.filter((c) => istDay(c.time) === lastDay);
-  if (session.length < 2) return null;
-
-  const closes = session.map((c) => c.close);
-  const refs = Number.isFinite(previousClose) ? [...closes, previousClose] : closes;
-  const lo = Math.min(...refs);
-  const hi = Math.max(...refs);
-  const span = Math.max(hi - lo, 0.0001);
-  const pad = 18;
-  const y = (v) => pad + (1 - (v - lo) / span) * (TRACE_H - pad * 2);
-  const x = (t) => {
-    const minute = (((t + IST_OFFSET_S) % 86400) / 60) - SESSION_OPEN_MIN;
-    return (Math.min(Math.max(minute, 0), SESSION_LEN_MIN) / SESSION_LEN_MIN) * TRACE_W;
-  };
-
-  const pts = session.map((c) => [x(c.time), y(c.close)]);
-  const line = pts.map(([px, py], i) => `${i ? 'L' : 'M'}${px.toFixed(1)} ${py.toFixed(1)}`).join(' ');
-  const last = pts[pts.length - 1];
-  return {
-    line,
-    fill: `${line} L${last[0].toFixed(1)} ${TRACE_H} L${pts[0][0].toFixed(1)} ${TRACE_H} Z`,
-    prevY: Number.isFinite(previousClose) ? y(previousClose) : null,
-    endX: last[0] / TRACE_W,
-    endY: last[1] / TRACE_H,
-    lastClose: closes[closes.length - 1],
-    date: new Date((session[0].time + IST_OFFSET_S) * 1000).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' }),
-  };
 }
 
 function useIstClock() {
@@ -153,8 +113,7 @@ export default function DashboardPage() {
   const vixIndex = indices.find((i) => i.symbol === 'INDIA_VIX');
   const stripIndices = indices.filter((i) => i !== nifty);
 
-  const { data: niftyCandles = [] } = useStockHistory(nifty?.symbol, '1D');
-  const trace = useMemo(() => buildSessionTrace(niftyCandles, nifty?.previousClose), [niftyCandles, nifty?.previousClose]);
+  const niftyHistory = useCandleHistory(nifty?.symbol, '1D');
 
   const isOpen = overview?.status === 'OPEN';
   const breadth = overview?.breadth;
@@ -249,29 +208,17 @@ export default function DashboardPage() {
             </div>
 
             {/* Intraday trajectory of the latest session */}
-            <figure className="fd-trajectory" aria-label={trace ? `${nifty?.name || 'NIFTY 50'} intraday trajectory, ${trace.date}` : 'Day range'}>
-              {trace ? (
-                <>
-                  <svg className="fd-trace" viewBox={`0 0 ${TRACE_W} ${TRACE_H}`} preserveAspectRatio="none" aria-hidden="true">
-                    {trace.prevY !== null && (
-                      <line x1="0" x2={TRACE_W} y1={trace.prevY} y2={trace.prevY} stroke="var(--border-strong)" strokeDasharray="2 6" vectorEffect="non-scaling-stroke" />
-                    )}
-                    <path className="fd-trace-fill" d={trace.fill} fill="var(--accent)" fillOpacity="0.07" />
-                    <path d={trace.line} fill="none" stroke="var(--fd-trace)" strokeWidth="1.6" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-                    <line x1={trace.endX * TRACE_W} x2={trace.endX * TRACE_W} y1="0" y2={TRACE_H} stroke="var(--accent)" strokeOpacity="0.45" vectorEffect="non-scaling-stroke" />
-                  </svg>
-                  <div className="fd-trace-overlay">
-                    <svg className="fd-now-ping" viewBox="0 0 40 40" style={{ left: `${trace.endX * 100}%`, top: `${trace.endY * 100}%` }} aria-hidden="true">
-                      <circle className="fd-ping" cx="20" cy="20" r="4" fill="none" stroke="var(--accent)" />
-                      <circle cx="20" cy="20" r="4" fill="var(--accent)" />
-                    </svg>
-                  </div>
-                  <span className="fd-lbl" style={{ left: 0, top: 0 }}>09:15 · Open · {trace.date}</span>
-                  <span className="fd-lbl fd-lbl--accent" style={{ left: `${trace.endX * 100}%`, top: 0, transform: trace.endX > 0.8 ? 'translateX(calc(-100% - 12px))' : 'translateX(12px)' }}>
-                    {isOpen ? 'Now' : 'Last'} · {formatNumber(trace.lastClose, 2)}
-                  </span>
-                  <div className="fd-axis fd-lbl">{AXIS_TICKS.map((t) => <span key={t}>{t}</span>)}</div>
-                </>
+            {/* Index chart: hover for any price, scroll or pinch to zoom, earlier sessions load on zoom-out */}
+            <figure className="fd-trajectory" aria-label={niftyHistory.candles.length ? `${nifty?.name || 'NIFTY 50'} price chart` : 'Day range'}>
+              {niftyHistory.candles.length ? (
+                <HeroIndexChart
+                  candles={niftyHistory.candles}
+                  previousClose={nifty?.previousClose}
+                  isOpen={isOpen}
+                  onLoadOlder={niftyHistory.loadOlder}
+                  loadingOlder={niftyHistory.loadingOlder}
+                  exhausted={niftyHistory.exhausted}
+                />
               ) : nifty ? (
                 <>
                   <span className="fd-lbl" style={{ left: 0, top: 0 }}>Day range · {formatNumber(nifty.low, 2)} – {formatNumber(nifty.high, 2)}</span>
@@ -281,6 +228,9 @@ export default function DashboardPage() {
             </figure>
           </div>
         </section>
+
+        {/* ── Post-market brief: headline and summary, full analysis in Pulse AI ── */}
+        <MarketBriefTeaser />
 
         {/* ── Command strip: other benchmarks + paper capital ── */}
         <div className="fd-band">
@@ -541,8 +491,8 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          {/* ── 04 Wire + Pulse AI brief ────────────────────── */}
-          <section className="fd-section fd-wire-grid fd-reveal">
+          {/* ── 04 Wire ───────────────────────────────────────── */}
+          <section className="fd-section fd-reveal">
             <div className="fd-wire">
               <div className="fd-section-head">
                 <span className="fd-lbl fd-lbl--accent">04</span>
@@ -575,15 +525,9 @@ export default function DashboardPage() {
                 <div className="fd-wire-list fd-empty">{isNewsLoading ? 'Loading financial news feed…' : 'No new market headlines right now.'}</div>
               )}
             </div>
-            <aside className="fd-brief" aria-label="Pulse AI market brief">
-              <AISummaryCard />
-            </aside>
           </section>
 
-          <footer className="fd-foot fd-lbl">
-            <span>Quotes &amp; NIFTY options via Upstox &nbsp;/&nbsp; Turnover &amp; FII/DII via NSE &nbsp;/&nbsp; News via Marketaux</span>
-            <span>Paper trading only · Not investment advice</span>
-          </footer>
+          <SiteFooter />
         </div>
       </div>
     </ErrorBoundary>

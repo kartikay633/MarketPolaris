@@ -397,6 +397,22 @@ input:focus, select:focus, textarea:focus, .input:focus, .select:focus { border-
 .fd-trajectory .fd-lbl { white-space: nowrap; }
 .fd-trace-fill { opacity: 0; animation: fd-fade 1.2s ease 0.9s forwards; }
 @keyframes fd-fade { to { opacity: 1; } }
+/* Post-market brief teaser under the hero */
+.fd-brief-teaser { margin-top: 28px; margin-bottom: 8px; }
+.fd-brief-teaser-inner { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px 40px; padding: 26px 28px; border: 1px solid var(--border); border-left: 2px solid var(--accent); border-radius: var(--radius-md); background: linear-gradient(120deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%); }
+.fd-brief-teaser-copy { display: flex; flex-direction: column; gap: 10px; min-width: 0; max-width: 860px; }
+.fd-dash .fd-brief-teaser-title, .fd-brief-teaser-title { margin: 0; font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 32px); font-weight: 300; line-height: 1.2; letter-spacing: -0.01em; color: var(--text-primary); }
+.dashboard-page h2.fd-brief-teaser-title { font-family: var(--font-display); font-size: clamp(22px, 2.6vw, 32px) !important; font-weight: 300 !important; letter-spacing: -0.01em; line-height: 1.2; }
+.fd-brief-teaser-text { margin: 0; color: var(--text-secondary); font-size: 14px; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.fd-brief-teaser-cta { flex: none; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+@media (max-width: 700px) { .fd-brief-teaser-inner { flex-direction: column; align-items: stretch; padding: 20px; } .fd-brief-teaser-cta { justify-content: center; } }
+/* Interactive index chart (lightweight-charts) inside the hero */
+.fd-hero-chart { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 8px; }
+.fd-hero-chart-readout { position: static !important; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-variant-numeric: tabular-nums; }
+.fd-hero-chart-readout .fd-lbl--accent { font-size: 13px; }
+.fd-hero-chart-hint { margin-left: auto; color: var(--text-dim); }
+.fd-hero-chart-canvas { position: relative; flex: 1; min-height: 0; cursor: crosshair; touch-action: pan-y; animation: fd-fade 0.8s ease both; opacity: 0; }
+@media (max-width: 700px) { .fd-hero-chart-hint { display: none; } }
 .fd-range-rail { position: relative; height: 2px; background: var(--border-strong); margin-top: 120px; }
 .fd-range-rail span { position: absolute; top: -7px; width: 2px; height: 16px; background: var(--text-primary); }
 
@@ -534,7 +550,7 @@ input:focus, select:focus, textarea:focus, .input:focus, .select:focus { border-
 @media (prefers-reduced-motion: reduce) {
   .fd-stars, .fd-floor::before, .fd-now-ping circle.fd-ping { animation: none; }
   .fd-trajectory svg.fd-trace { animation: none; }
-  .fd-trace-fill, .fd-reveal { opacity: 1; animation: none; }
+  .fd-trace-fill, .fd-reveal, .fd-hero-chart-canvas { opacity: 1; animation: none; }
 }
 
 /* Section titles outrank the legacy compact dashboard heading rule */

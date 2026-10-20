@@ -8,7 +8,6 @@ import {
   RefreshCw,
   ShieldCheck,
   Clock,
-  Sparkles,
   TrendingUp,
   FileText,
   Compass,
@@ -17,9 +16,12 @@ import {
 } from 'lucide-react';
 import { Skeleton } from '../common/LoadingSkeleton';
 
-export default function AISummaryCard() {
+// full: every section stacked (the Pulse AI market brief tab); otherwise a compact tabbed card.
+export default function AISummaryCard({ full = false }) {
   const { data: summary, isLoading, refetch, isFetching } = useAIMarketSummary();
-  const [activeTab, setActiveTab] = useState('summary'); // 'summary' | 'postmarket' | 'pivots'
+  const [selectedTab, setActiveTab] = useState('summary'); // 'summary' | 'postmarket' | 'pivots'
+  const show = (id) => full || selectedTab === id;
+  const activeTab = selectedTab;
 
   if (isLoading) {
     return (
@@ -117,8 +119,8 @@ export default function AISummaryCard() {
         </div>
       </div>
 
-      {/* Navigation Sub-Tabs */}
-      <div 
+      {/* Navigation Sub-Tabs (the full brief shows every section instead) */}
+      {!full && <div
         className="tab-group" 
         style={{ 
           backgroundColor: 'var(--card-hover)',
@@ -154,16 +156,16 @@ export default function AISummaryCard() {
           <Compass size={11} />
           <span>Key Levels</span>
         </button>
-      </div>
+      </div>}
 
       {/* TAB 1: Last Day Summary & Key Closing Drivers */}
-      {activeTab === 'summary' && (
+      {show('summary') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
-          <h3 style={{ fontSize: '13.5px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
+          <h3 style={{ fontSize: full ? '20px' : '13.5px', fontWeight: 600, color: 'var(--text-primary)', margin: 0, lineHeight: 1.4 }}>
             {summary?.headline}
           </h3>
 
-          <p style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: 1.55, margin: 0 }}>
+          <p style={{ fontSize: full ? '14px' : '12px', color: 'var(--text-secondary)', lineHeight: 1.6, margin: 0 }}>
             {summary?.summary}
           </p>
 
@@ -182,8 +184,9 @@ export default function AISummaryCard() {
       )}
 
       {/* TAB 2: The exchange data behind the brief, each with the time it was published */}
-      {activeTab === 'postmarket' && (
+      {show('postmarket') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', position: 'relative', zIndex: 1 }}>
+          {full && <h4 className="ai-brief-section">Session data</h4>}
           <div style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '5px', marginBottom: '2px' }}>
             <Calendar size={12} />
             <span>{sessionFeed.length ? 'Exchange data behind this brief, with the time each figure is as of:' : 'Session data will appear once exchange figures are available.'}</span>
@@ -228,8 +231,9 @@ export default function AISummaryCard() {
       )}
 
       {/* TAB 3: Levels computed from the session's index and option-chain data */}
-      {activeTab === 'pivots' && (
+      {show('pivots') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', position: 'relative', zIndex: 1 }}>
+          {full && <h4 className="ai-brief-section">Key levels</h4>}
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
             {levelTiles.length === 0
               ? "Levels appear once the session's index and option-chain data are available."
@@ -259,26 +263,12 @@ export default function AISummaryCard() {
         <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <ShieldCheck size={12} color="var(--positive)" /> Built from NSE &amp; Upstox market data
         </span>
-        <Link
-          to="/ai"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '4px',
-            fontSize: '12px',
-            color: 'var(--accent-bright)',
-            fontWeight: 600,
-            textDecoration: 'none',
-            backgroundColor: 'rgba(168, 85, 247, 0.12)',
-            padding: '3px 8px',
-            borderRadius: 'var(--radius-xs)',
-            border: '1px solid rgba(168, 85, 247, 0.3)',
-          }}
-        >
-          <Sparkles size={12} color="#c084fc" />
-          <span>Launch Agentic Quant Lab (5-Yr ML)</span>
-          <ArrowRight size={13} />
-        </Link>
+        {!full && (
+          <Link to="/ai?tab=brief" className="ai-brief-link">
+            <span>Full analysis</span>
+            <ArrowRight size={13} />
+          </Link>
+        )}
       </div>
     </div>
   );

@@ -615,6 +615,9 @@ export class UpstoxProvider extends MarketDataProvider {
     } else if (normInterval === '3M') {
       upstoxInterval = 'day';
       daysBack = 90;
+    } else if (normInterval === '6M') {
+      upstoxInterval = 'day';
+      daysBack = 182;
     } else if (normInterval === '1Y') {
       upstoxInterval = 'day';
       daysBack = 365;
