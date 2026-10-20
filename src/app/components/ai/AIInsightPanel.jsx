@@ -48,7 +48,7 @@ export default function AIInsightPanel({ symbol }) {
             <Cpu size={15} />
           </div>
           <h3 style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-            Pulse Research • AI Synthesis
+            Polaris Research • AI Synthesis
           </h3>
         </div>
 
