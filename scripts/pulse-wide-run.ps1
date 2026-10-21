@@ -1,12 +1,13 @@
-# Wide-universe study (ml/WIDE_PROTOCOL.md, amendments 1 and 1b), after the candles, the twenty-year
+# Wide-universe study (ml/WIDE_PROTOCOL.md, amendments 1, 1b and 1c), after the candles, the twenty-year
 # extension and NSE's corporate actions are collected: board meetings (results calendar), then the
 # development runs for risk and ranking, then the single holdout evaluation with the gates.
-# Runs at below-normal priority; logs go to data/pulse-wide/run.log. A finished step is not repeated.
+# Runs at below-normal priority; logs go to data/pulse-wide/train.log. A finished step is not repeated.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $py = Join-Path $root '.venv-pulse\Scripts\python.exe'
-$log = Join-Path $root 'data\pulse-wide\run.log'
+$log = Join-Path $root 'data\pulse-wide\train.log'
+$env:PYTHONUTF8 = '1'
 $reports = Join-Path $root 'data\pulse-wide\reports'
 (Get-Process -Id $PID).PriorityClass = 'BelowNormal'
 
@@ -42,14 +43,15 @@ function DevDone($kind) {
 
 function Step($name, [string[]]$arguments, [switch]$model) {
   if ($model) { WaitForNightlyJob }
-  Add-Content $log "[$(Get-Date -Format s)] > $name"
-  & $py -W ignore @arguments *>> $log
-  if ($LASTEXITCODE -ne 0) { Add-Content $log "[$(Get-Date -Format s)] < $name failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
-  Add-Content $log "[$(Get-Date -Format s)] < $name ok"
+  Add-Content $log "[$(Get-Date -Format s)] > $name" -Encoding UTF8
+  # cmd appends the bytes as Python writes them (UTF-8); PowerShell 5.1's own redirect would write UTF-16.
+  cmd /c "`"$py`" -W ignore $($arguments -join ' ') >> `"$log`" 2>&1"
+  if ($LASTEXITCODE -ne 0) { Add-Content $log "[$(Get-Date -Format s)] < $name failed ($LASTEXITCODE)" -Encoding UTF8; exit $LASTEXITCODE }
+  Add-Content $log "[$(Get-Date -Format s)] < $name ok" -Encoding UTF8
 }
 
 if (-not (BoardMeetingsDone)) { Step 'board meetings' @('-m', 'ml.news_history', 'collect', '--data-dir', 'data/pulse-wide', '--only', 'board-meetings') }
 if (-not (DevDone 'risk')) { Step 'risk development' @('-m', 'ml.wide', 'dev', 'risk') -model }
 if (-not (DevDone 'rank')) { Step 'ranking development' @('-m', 'ml.wide', 'dev', 'rank') -model }
 if (-not (Test-Path (Join-Path $reports 'wide-final.json'))) { Step 'final holdout evaluation' @('-m', 'ml.wide', 'final') -model }
-Add-Content $log "[$(Get-Date -Format s)] wide study finished"
+Add-Content $log "[$(Get-Date -Format s)] wide study finished" -Encoding UTF8
