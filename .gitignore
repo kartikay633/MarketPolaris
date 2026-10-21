@@ -49,3 +49,6 @@ data/app/
 
 # Company news wire (NSE filings and publisher headlines), stored per day
 data/news-wire/
+
+# Wide-universe research data (ml/WIDE_PROTOCOL.md)
+data/pulse-wide/
