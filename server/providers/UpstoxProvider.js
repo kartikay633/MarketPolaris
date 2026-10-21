@@ -14,6 +14,7 @@ import {
 import { getMarketStatus, isMarketOpen } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
 import { NotFoundError, ProviderError } from '../utils/errors.js';
+import { InstrumentDirectory } from './instrumentDirectory.js';
 
 export { SOURCE_EOD, SOURCE_UNAVAILABLE };
 const NSE_INSTRUMENTS_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
@@ -127,6 +128,7 @@ export class UpstoxProvider extends MarketDataProvider {
     this.isLive = Boolean(this.token && this.token !== 'your-analytics-token');
     this.dataDir = path.resolve(process.env.PULSE_DATA_DIR || 'data/pulse');
     this.nse = nseClient;
+    this.directory = new InstrumentDirectory(this.dataDir);
     this.cache = new NodeCache({ checkperiod: 60, useClones: false });
     this.inflight = new Map();
 
@@ -374,7 +376,7 @@ export class UpstoxProvider extends MarketDataProvider {
 
   async getQuote(symbol) {
     const upper = symbol.toUpperCase();
-    const instKey = SYMBOL_TO_INSTRUMENT_KEY[upper];
+    const instKey = this._instrumentKey(upper);
 
     if (this.isLive && instKey) {
       try {
@@ -402,13 +404,15 @@ export class UpstoxProvider extends MarketDataProvider {
             // no source is null, never a circuit limit or a placeholder.
             const cleanSym = upper.replace(/^(NSE|BSE):/, '');
             const saved = await readCandleSummary(this.dataDir, cleanSym);
+            // Outside the research universe there are no saved candles: a year of Upstox daily candles instead.
+            const range = saved || (await this._yearRange(upper));
             const high = positive(q.ohlc?.high);
             const low = positive(q.ohlc?.low);
             const sectorCode = this._universe().stocks.find((i) => i.symbol === cleanSym)?.sector || saved?.sector || null;
 
             return {
               symbol: upper,
-              name: this._names(this._universe())[cleanSym] || cleanSym,
+              name: this._displayName(cleanSym),
               exchange: upper.startsWith('BSE') ? 'BSE' : 'NSE',
               instrumentKey: instKey,
               ltp,
@@ -422,10 +426,11 @@ export class UpstoxProvider extends MarketDataProvider {
               volume: typeof q.volume === 'number' ? q.volume : null,
               averageVolume: null,
               // The saved range ends at the last collected session; extend it with today's range.
-              fiftyTwoWeekHigh: saved ? Math.max(saved.fiftyTwoWeekHigh, high ?? ltp) : null,
-              fiftyTwoWeekLow: saved ? Math.min(saved.fiftyTwoWeekLow, low ?? ltp) : null,
+              fiftyTwoWeekHigh: range ? Math.max(range.fiftyTwoWeekHigh, high ?? ltp) : null,
+              fiftyTwoWeekLow: range ? Math.min(range.fiftyTwoWeekLow, low ?? ltp) : null,
               sector: sectorCode ? SECTOR_LABELS[sectorCode] || sectorCode : null,
               industry: null,
+              covered: this._universe().stocks.some((i) => i.symbol === cleanSym),
               marketStatus: marketState.status,
               lastUpdated: new Date().toISOString(),
               source: SOURCE_LIVE,
@@ -449,7 +454,7 @@ export class UpstoxProvider extends MarketDataProvider {
     const sectorCode = this._universe().stocks.find((i) => i.symbol === cleanSym)?.sector || saved.sector || null;
     return {
       symbol: upper,
-      name: this._names(this._universe())[cleanSym] || cleanSym,
+      name: this._displayName(cleanSym),
       exchange: upper.startsWith('BSE') ? 'BSE' : 'NSE',
       instrumentKey: instKey || null,
       ltp: saved.close,
@@ -469,12 +474,13 @@ export class UpstoxProvider extends MarketDataProvider {
       marketStatus: getMarketStatus().status,
       lastUpdated: new Date().toISOString(),
       asOf: saved.date,
+      covered: this._universe().stocks.some((i) => i.symbol === cleanSym),
       source: SOURCE_EOD,
     };
   }
 
   async getHistoricalCandles(symbol, interval = 'day', fromDate, toDate) {
-    const instKey = SYMBOL_TO_INSTRUMENT_KEY[symbol.toUpperCase()] || SYMBOL_TO_INSTRUMENT_KEY[`NSE:${symbol.toUpperCase()}`];
+    const instKey = this._instrumentKey(symbol);
 
     // Determine interval configuration
     let upstoxInterval = 'day';
@@ -564,55 +570,43 @@ export class UpstoxProvider extends MarketDataProvider {
     return (weekly ? toWeeks(daily) : daily).map((c) => ({ ...c, source: SOURCE_EOD }));
   }
 
+  // 52-week range from a year of Upstox daily candles, kept 12 hours; null when unavailable.
+  async _yearRange(symbol) {
+    return this._cached(`range:${symbol}`, async () => {
+      const rows = (await this.getHistoricalCandles(symbol, '1Y')).filter((c) => c.high > 0 && c.low > 0);
+      if (rows.length < 20) return null;
+      return { fiftyTwoWeekHigh: Math.max(...rows.map((c) => c.high)), fiftyTwoWeekLow: Math.min(...rows.map((c) => c.low)) };
+    }, { open: 12 * 3600, closed: 12 * 3600 });
+  }
+
+  // Instrument key for 'RELIANCE', 'NSE:RELIANCE' or 'BSE:RELIANCE': the research universe first,
+  // then every NSE main-board equity in the directory.
+  _instrumentKey(symbol) {
+    const upper = String(symbol || '').toUpperCase();
+    return SYMBOL_TO_INSTRUMENT_KEY[upper] || SYMBOL_TO_INSTRUMENT_KEY[`NSE:${upper}`] || this.directory.get(upper)?.key || null;
+  }
+
+  _displayName(symbol) {
+    return this._names(this._universe())[symbol] || this.directory.get(symbol)?.name || symbol;
+  }
+
+  // Any NSE main-board equity by symbol or company name. Stocks with Polaris AI forecasts are
+  // marked covered (with their sector); the rest have prices and charts only.
   async searchInstruments(query) {
-    const q = (query || '').toLowerCase().trim();
-    const universe = [
-      { symbol: 'NSE:RELIANCE', name: 'Reliance Industries Ltd', exchange: 'NSE', sector: 'Energy' },
-      { symbol: 'NSE:TCS', name: 'Tata Consultancy Services', exchange: 'NSE', sector: 'Information Technology' },
-      { symbol: 'NSE:HDFCBANK', name: 'HDFC Bank Limited', exchange: 'NSE', sector: 'Banking' },
-      { symbol: 'NSE:INFY', name: 'Infosys Limited', exchange: 'NSE', sector: 'Information Technology' },
-      { symbol: 'NSE:ICICIBANK', name: 'ICICI Bank Ltd', exchange: 'NSE', sector: 'Banking' },
-      { symbol: 'NSE:BHARTIARTL', name: 'Bharti Airtel Ltd', exchange: 'NSE', sector: 'Telecommunications' },
-      { symbol: 'NSE:TATAMOTORS', name: 'Tata Motors Ltd', exchange: 'NSE', sector: 'Automobile' },
-      { symbol: 'NSE:ITC', name: 'ITC Limited', exchange: 'NSE', sector: 'FMCG' },
-      { symbol: 'NSE:LT', name: 'Larsen & Toubro Ltd', exchange: 'NSE', sector: 'Infrastructure & Capital Goods' },
-      { symbol: 'NSE:TATASTEEL', name: 'Tata Steel Ltd', exchange: 'NSE', sector: 'Metals & Mining' },
-      { symbol: 'NSE:SUNPHARMA', name: 'Sun Pharmaceutical Ltd', exchange: 'NSE', sector: 'Pharmaceuticals' },
-      { symbol: 'NSE:SBIN', name: 'State Bank of India', exchange: 'NSE', sector: 'Public Sector Banking' },
-      { symbol: 'NSE:AXISBANK', name: 'Axis Bank Limited', exchange: 'NSE', sector: 'Banking' },
-      { symbol: 'NSE:KOTAKBANK', name: 'Kotak Mahindra Bank', exchange: 'NSE', sector: 'Banking' },
-      { symbol: 'NSE:WIPRO', name: 'Wipro Limited', exchange: 'NSE', sector: 'Information Technology' },
-      { symbol: 'NSE:HCLTECH', name: 'HCL Technologies Ltd', exchange: 'NSE', sector: 'Information Technology' },
-      { symbol: 'NSE:BAJFINANCE', name: 'Bajaj Finance Limited', exchange: 'NSE', sector: 'Financial Services' },
-      { symbol: 'NSE:BAJAJFINSV', name: 'Bajaj Finserv Ltd', exchange: 'NSE', sector: 'Financial Services' },
-      { symbol: 'NSE:MARUTI', name: 'Maruti Suzuki India Ltd', exchange: 'NSE', sector: 'Automobile' },
-      { symbol: 'NSE:ASIANPAINT', name: 'Asian Paints Ltd', exchange: 'NSE', sector: 'Paints & Consumer' },
-      { symbol: 'NSE:TITAN', name: 'Titan Company Limited', exchange: 'NSE', sector: 'Consumer Goods & Luxury' },
-      { symbol: 'NSE:ULTRACEMCO', name: 'UltraTech Cement Ltd', exchange: 'NSE', sector: 'Cement & Building Materials' },
-      { symbol: 'NSE:NTPC', name: 'NTPC Limited', exchange: 'NSE', sector: 'Power Generation' },
-      { symbol: 'NSE:POWERGRID', name: 'Power Grid Corporation', exchange: 'NSE', sector: 'Utilities & Transmission' },
-      { symbol: 'NSE:ONGC', name: 'Oil & Natural Gas Corp', exchange: 'NSE', sector: 'Energy & Exploration' },
-      { symbol: 'NSE:COALINDIA', name: 'Coal India Limited', exchange: 'NSE', sector: 'Energy & Mining' },
-      { symbol: 'NSE:JSWSTEEL', name: 'JSW Steel Ltd', exchange: 'NSE', sector: 'Metals & Mining' },
-      { symbol: 'NSE:HINDALCO', name: 'Hindalco Industries Ltd', exchange: 'NSE', sector: 'Metals & Aluminium' },
-      { symbol: 'NSE:ADANIENT', name: 'Adani Enterprises Ltd', exchange: 'NSE', sector: 'Diversified Conglomerate' },
-      { symbol: 'NSE:ADANIPORTS', name: 'Adani Ports & SEZ Ltd', exchange: 'NSE', sector: 'Ports & Logistics' },
-      { symbol: 'NSE:NESTLEIND', name: 'Nestle India Limited', exchange: 'NSE', sector: 'FMCG & Food' },
-      { symbol: 'NSE:DRREDDY', name: "Dr. Reddy's Laboratories", exchange: 'NSE', sector: 'Pharmaceuticals' },
-      { symbol: 'NSE:CIPLA', name: 'Cipla Limited', exchange: 'NSE', sector: 'Pharmaceuticals' },
-      { symbol: 'NSE:TECHM', name: 'Tech Mahindra Limited', exchange: 'NSE', sector: 'Information Technology' },
-    ];
-
-    if (!q) {
-      return universe.slice(0, 8);
+    const universe = this._universe();
+    const covered = new Map(universe.stocks.map((i) => [i.symbol, i.sector]));
+    let results = this.directory.search(query, { covered: new Set(covered.keys()) });
+    if (!this.directory.size) {
+      // Directory not downloaded yet: search the covered stocks by symbol and saved name.
+      const q = String(query || '').trim().toUpperCase().replace(/^(NSE|BSE):/, '');
+      const names = this._names(universe);
+      results = q ? universe.stocks.filter((i) => i.symbol.includes(q) || (names[i.symbol] || '').toUpperCase().includes(q)).slice(0, 10)
+        .map((i) => ({ symbol: `NSE:${i.symbol}`, name: names[i.symbol] || i.symbol, exchange: 'NSE', series: 'EQ', covered: true })) : [];
     }
-
-    return universe.filter(
-      (item) =>
-        item.symbol.toLowerCase().includes(q) ||
-        item.name.toLowerCase().includes(q) ||
-        item.sector.toLowerCase().includes(q)
-    );
+    return results.map((r) => {
+      const code = covered.get(r.symbol.replace(/^NSE:/, ''));
+      return { ...r, sector: code ? SECTOR_LABELS[code] || code : null };
+    });
   }
 }
 

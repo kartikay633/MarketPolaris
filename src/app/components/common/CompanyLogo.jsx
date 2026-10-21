@@ -10,6 +10,7 @@ const STOCK_DOMAINS = {
   HDFCBANK:    ['hdfcbank.com'],
   ICICIBANK:   ['icicibank.com'],
   TATAMOTORS:  ['tatamotors.com', 'tata.com'],
+  TMPV:        ['tatamotors.com', 'tata.com'],
   SBIN:        ['sbi.bank', 'statebankofindia.com', 'sbi.co.in'],
   WIPRO:       ['wipro.com'],
   MARUTI:      ['marutisuzuki.com'],
@@ -77,6 +78,7 @@ const STOCK_DOMAINS = {
 // Asset provenance and viewport adaptations are recorded in public/company-logos/SOURCES.md.
 const LOCAL_LOGOS = {
   TATAMOTORS: '/company-logos/tata.png',
+  TMPV: '/company-logos/tata.png',
   TATASTEEL: '/company-logos/tata.png',
   TCS: '/company-logos/tcs.png',
   RELIANCE: '/company-logos/reliance.png',

@@ -99,13 +99,15 @@ export function useCandleHistory(symbol, interval = '1D') {
   return { candles, isLoading: latest.isLoading, loadOlder, loadingOlder, exhausted };
 }
 
-export function useStockSearch(query) {
+export function useStockSearch(query, { enabled = true } = {}) {
   return useQuery({
     queryKey: ['stock', 'search', query],
     queryFn: async () => {
       const res = await api.get(`/search?q=${encodeURIComponent(query || '')}`);
       return res.data?.results || [];
     },
+    enabled,
     staleTime: 60000,
+    placeholderData: (previous) => previous,
   });
 }

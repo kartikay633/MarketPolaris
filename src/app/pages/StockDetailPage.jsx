@@ -381,7 +381,17 @@ export default function StockDetailPage() {
       {/* Two Column Section: AI Synthesis & Related News */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '16px', alignItems: 'start' }}>
         {/* Polaris AI Insights Panel */}
-        <AIInsightPanel symbol={quote.symbol} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {quote.covered === false && (
+            <div className="alert-box" role="note">
+              <span>
+                Polaris AI forecasts and the AI portfolios cover 175 large and mid-cap NSE stocks, and this is not one of them.
+                Its price, chart, news and paper trading work as usual.
+              </span>
+            </div>
+          )}
+          <AIInsightPanel symbol={quote.symbol} />
+        </div>
 
         {/* Latest Stock News & Catalysts */}
         <div className="card card-padded">

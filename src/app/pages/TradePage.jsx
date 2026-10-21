@@ -29,10 +29,10 @@ import {
 import { formatIndianNumber, formatINR } from '../utils/formatters';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import CompanyLogo from '../components/common/CompanyLogo';
-import { EQUITIES_UNIVERSE, searchEquities } from '../constants/equities';
+import { useStockSearch } from '../hooks/useStockData';
 
 const POPULAR_SYMBOLS = [
-  'NSE:TATAMOTORS',
+  'NSE:TMPV',
   'NSE:TATASTEEL',
   'NSE:TCS',
   'NSE:RELIANCE',
@@ -101,7 +101,7 @@ export default function TradePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
 
-  const urlSymbol = searchParams.get('symbol') || 'NSE:TATAMOTORS';
+  const urlSymbol = searchParams.get('symbol') || 'NSE:TMPV';
   const [selectedSymbol, setSelectedSymbol] = useState(urlSymbol);
   const [customInput, setCustomInput] = useState('');
   const [orderType, setOrderType] = useState('BUY'); // 'BUY' | 'SELL'
@@ -163,7 +163,10 @@ export default function TradePage() {
   const isExecutable = orderType === 'BUY' ? canBuy : canSell;
 
   // Autocomplete Suggestions
-  const suggestions = searchEquities(customInput, 8);
+  // Every NSE main-board equity, searched on the server; results carry no prices (the ticket loads the live one).
+  const searchTerm = customInput.trim();
+  const { data: searchResults = [] } = useStockSearch(searchTerm, { enabled: searchTerm.length > 0 });
+  const suggestions = searchTerm ? searchResults.slice(0, 8) : [];
   const [dropdownDismissed, setDropdownDismissed] = useState(false);
   const showDropdown = !dropdownDismissed && customInput.trim().length > 0 && suggestions.length > 0;
 
@@ -277,11 +280,11 @@ export default function TradePage() {
                 Paper trading
               </h1>
               <span className="badge badge--live" style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
-                <Zap size={11} /> LIVE EXECUTION ENGINE
+                <Zap size={11} /> LIVE PRICES
               </span>
             </div>
             <p style={{ fontSize: '12.5px', color: 'var(--text-secondary)', margin: 0 }}>
-              Zero-risk simulated terminal executing against live NSE / BSE price discovery ticks.
+              Practise with virtual money at live NSE prices. Nothing here is a real order.
             </p>
           </div>
 
@@ -359,7 +362,7 @@ export default function TradePage() {
         <div style={{ marginBottom: '18px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '10px', position: 'relative' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '11px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', marginRight: '4px' }}>
-              Institutional Watchlist:
+              Quick picks:
             </span>
             {POPULAR_SYMBOLS.map((sym) => {
               const isSel = sym.toUpperCase() === selectedSymbol.toUpperCase();
@@ -459,7 +462,6 @@ export default function TradePage() {
 
                 {suggestions.map((item, idx) => {
                   const isActive = idx === activeSuggestionIndex;
-                  const itemPositive = (item.change ?? 0) >= 0;
 
                   return (
                     <div
@@ -506,18 +508,10 @@ export default function TradePage() {
                         </div>
                       </div>
 
-                      {/* LTP & Change */}
-                      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <div className="num-tabular" style={{ fontSize: '13px', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          ₹{formatIndianNumber(item.ltp)}
-                        </div>
-                        <div
-                          className={`num-tabular ${itemPositive ? 'text-positive' : 'text-negative'}`}
-                          style={{ fontSize: '11px', fontWeight: 600 }}
-                        >
-                          {itemPositive ? '+' : ''}{item.changePercent?.toFixed(2)}%
-                        </div>
-                      </div>
+                      {/* Polaris AI coverage */}
+                      <span className={`badge badge--sm ${item.covered ? 'badge--accent' : ''}`} style={{ fontSize: '9.5px', flexShrink: 0 }}>
+                        {item.covered ? 'Polaris AI' : 'Price & chart'}
+                      </span>
                     </div>
                   );
                 })}

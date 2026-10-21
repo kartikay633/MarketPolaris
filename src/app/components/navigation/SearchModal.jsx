@@ -147,7 +147,7 @@ export default function SearchModal({ isOpen, onClose }) {
             ref={inputRef}
             aria-label="Search equities"
             type="text"
-            placeholder="Search equities by ticker, name, or sector (e.g. RELIANCE, TCS)..."
+            placeholder="Search any NSE stock by symbol or company name (e.g. RELIANCE, Suzlon)"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             style={{
@@ -206,7 +206,7 @@ export default function SearchModal({ isOpen, onClose }) {
 
           {loading ? (
             <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '12px' }}>
-              Searching live tickers...
+              Searching NSE stocks…
             </div>
           ) : displayList.length === 0 ? (
             <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: '13px' }}>
@@ -242,6 +242,11 @@ export default function SearchModal({ isOpen, onClose }) {
                         <span className="badge badge--sm">
                           NSE
                         </span>
+                        {item.covered !== undefined && (
+                          <span className={`badge badge--sm ${item.covered ? 'badge--accent' : ''}`} title={item.covered ? 'Polaris AI forecasts cover this stock' : 'Price, chart and paper trading only'}>
+                            {item.covered ? 'Polaris AI' : 'Price & chart'}
+                          </span>
+                        )}
                       </div>
                       <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '1px' }}>
                         {item.name || item.description || 'Listed Equity'}

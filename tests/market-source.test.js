@@ -7,6 +7,7 @@ import axios from 'axios';
 import { UpstoxProvider, SOURCE_LIVE } from '../server/providers/UpstoxProvider.js';
 import { SOURCE_EOD } from '../server/providers/marketSnapshot.js';
 import { MarketDataService } from '../server/services/marketDataService.js';
+import { InstrumentDirectory } from '../server/providers/instrumentDirectory.js';
 
 const INDEX_KEYS = ['NSE_INDEX|Nifty 50', 'BSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank', 'NSE_INDEX|India VIX'];
 
@@ -30,6 +31,8 @@ async function provider(t, { live, candles = {} }) {
   p.dataDir = dir;
   p.universe = { stocks: [], sectorIndices: [], headline: [] };
   p.names = {};
+  p.directory = new InstrumentDirectory(dir, { fetcher: async () => { throw new Error('no network in tests'); } });
+  p.directory.fetchedAt = new Date().toISOString();
   return p;
 }
 

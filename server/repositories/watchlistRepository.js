@@ -7,7 +7,7 @@ import { persistentMap, persist } from './localStore.js';
 const memoryWatchlists = persistentMap('watchlists', { encode: (s) => [...s], decode: (a) => new Set(a) });
 
 // Default seed symbols for new users
-const DEFAULT_SYMBOLS = ['NSE:RELIANCE', 'NSE:TCS', 'NSE:HDFCBANK', 'NSE:INFY', 'NSE:TATAMOTORS'];
+const DEFAULT_SYMBOLS = ['NSE:RELIANCE', 'NSE:TCS', 'NSE:HDFCBANK', 'NSE:INFY', 'NSE:TMPV'];
 
 export class WatchlistRepository {
   async getItems(userId) {

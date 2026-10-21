@@ -8,7 +8,7 @@ import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 import CompanyLogo from '../components/common/CompanyLogo';
 
-const POPULAR_ADD_SUGGESTIONS = ['NSE:BHARTIARTL', 'NSE:TATAMOTORS', 'NSE:ITC', 'NSE:LT', 'NSE:SBIN', 'NSE:MARUTI'];
+const POPULAR_ADD_SUGGESTIONS = ['NSE:BHARTIARTL', 'NSE:TMPV', 'NSE:ITC', 'NSE:LT', 'NSE:SBIN', 'NSE:MARUTI'];
 
 export default function WatchlistPage() {
   const navigate = useNavigate();
@@ -45,7 +45,7 @@ export default function WatchlistPage() {
               </span>
             </div>
             <p className="page-subtitle">
-              Live multi-asset radar with real-time NSE / BSE market quote updates.
+              Your stocks at live NSE prices, refreshed every 15 seconds.
             </p>
           </div>
 
@@ -172,7 +172,7 @@ export default function WatchlistPage() {
               <Star size={36} className="empty-state-icon" />
               <div className="empty-state-title">Your watchlist is empty</div>
               <div className="empty-state-description">
-                Track your priority NSE and BSE stocks with real-time ticks and quick trading shortcuts.
+                Add any NSE stock to follow its live price and trade it from here.
               </div>
               <button
                 onClick={() => handleAddSymbol('NSE:RELIANCE')}
