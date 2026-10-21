@@ -1,12 +1,19 @@
-# Wide-universe study (ml/WIDE_PROTOCOL.md), after `node scripts/pulse-wide.js collect`:
-# NSE board meetings (results calendar), then ranking and risk training on data/pulse-wide,
-# then the pre-registered gates. Runs at below-normal priority; logs go to data/pulse-wide/run.log.
+# Wide-universe study (ml/WIDE_PROTOCOL.md, amendments 1 and 1b), after the candles, the twenty-year
+# extension and NSE's corporate actions are collected: board meetings (results calendar), then the
+# development runs for risk and ranking, then the single holdout evaluation with the gates.
+# Runs at below-normal priority; logs go to data/pulse-wide/run.log. A finished step is not repeated.
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 $py = Join-Path $root '.venv-pulse\Scripts\python.exe'
 $log = Join-Path $root 'data\pulse-wide\run.log'
+$reports = Join-Path $root 'data\pulse-wide\reports'
 (Get-Process -Id $PID).PriorityClass = 'BelowNormal'
+
+# Ask Windows not to sleep while this script runs (ES_CONTINUOUS | ES_SYSTEM_REQUIRED); the request
+# ends with the process, so no power setting is changed.
+Add-Type -Namespace Polaris -Name Power -MemberDefinition '[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint flags);'
+[void][Polaris.Power]::SetThreadExecutionState([uint32]'0x80000001')
 
 # v4's nightly job (22:00, Mon-Fri) has priority. Training is long and memory-hungry, so on a weekday
 # evening it starts only after that job (22:40 at the earliest), and never while it runs.
@@ -28,16 +35,21 @@ function BoardMeetingsDone {
   (Test-Path $status) -and ((Get-Content $status -Raw | ConvertFrom-Json).finishedAt)
 }
 
-function Step($name, [string[]]$arguments) {
-  if ($name -like '*train*' -or $name -eq 'gates') { WaitForNightlyJob }
+function DevDone($kind) {
+  $file = Join-Path $reports "wide-dev-$kind.json"
+  (Test-Path $file) -and ((Get-Content $file -Raw | ConvertFrom-Json).complete)
+}
+
+function Step($name, [string[]]$arguments, [switch]$model) {
+  if ($model) { WaitForNightlyJob }
   Add-Content $log "[$(Get-Date -Format s)] > $name"
-  & $py @arguments *>> $log
+  & $py -W ignore @arguments *>> $log
   if ($LASTEXITCODE -ne 0) { Add-Content $log "[$(Get-Date -Format s)] < $name failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
   Add-Content $log "[$(Get-Date -Format s)] < $name ok"
 }
 
 if (-not (BoardMeetingsDone)) { Step 'board meetings' @('-m', 'ml.news_history', 'collect', '--data-dir', 'data/pulse-wide', '--only', 'board-meetings') }
-Step 'rank train' @('-m', 'ml.rank', 'train', '--data-dir', 'data/pulse-wide')
-Step 'risk train' @('-m', 'ml.risk', 'train', '--data-dir', 'data/pulse-wide')
-Step 'gates' @('-m', 'ml.wide_compare', '--core', 'data/pulse', '--wide', 'data/pulse-wide')
+if (-not (DevDone 'risk')) { Step 'risk development' @('-m', 'ml.wide', 'dev', 'risk') -model }
+if (-not (DevDone 'rank')) { Step 'ranking development' @('-m', 'ml.wide', 'dev', 'rank') -model }
+if (-not (Test-Path (Join-Path $reports 'wide-final.json'))) { Step 'final holdout evaluation' @('-m', 'ml.wide', 'final') -model }
 Add-Content $log "[$(Get-Date -Format s)] wide study finished"
