@@ -17,8 +17,7 @@ const HOLIDAYS_2026 = [
   '2026-08-27', // Janmashtami
   '2026-09-04', // Milad-Un-Nabi
   '2026-10-02', // Mahatma Gandhi Jayanti
-  '2026-10-20', // Dussehra
-  '2026-10-21', // Dussehra
+  '2026-10-20', // Dussehra (21 Oct is a trading day: the live feed showed trades that day)
   '2026-11-09', // Diwali (Laxmi Puja)
   '2026-11-10', // Diwali (Balipratipada)
   '2026-11-30', // Guru Nanak Jayanti
