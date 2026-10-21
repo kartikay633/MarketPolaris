@@ -1,5 +1,76 @@
 # Pulse research results
 
+## Wide universe: 755 stocks, twenty years — 21 October 2026 (risk gates not passed; not used)
+
+Protocol: `ml/WIDE_PROTOCOL.md` with amendments 1, 1b and 1c, all committed before any model ran on
+the wide data (7d0ed2a, edfd44c, 8ede015). Run `python -m ml.wide dev risk`, `dev rank`, then
+`final` once (`scripts/pulse-wide-run.ps1`, 22:41 to 23:50). Reports in `data/pulse-wide/reports/`
+(ignored). v4's models, universe, paper account and 26 December review were not touched.
+
+**Data.**
+
+* NIFTY Total Market list of 21 October 2026: 748 stocks with candles, 706 with enough history
+  for a forecast row. Upstox daily candles from October 2006.
+* Amendment 1c cleaning dropped 4,094 no-trade sessions and 41,004 coarse-priced sessions (Upstox
+  rounds split-adjusted history to ₹0.50). It added 20 stocks at the 1 January 2015 price-scale
+  seam to the 24 NSE-confirmed demergers and schemes: 44 excluded events in all.
+* About 1.98 million stock-sessions; development runs to 1 November 2024 (1.67 million rows, 629
+  stocks). The holdout runs 4 December 2024 to 21 September 2026: 446 sessions, the same start as
+  v4's risk holdout.
+
+**Development (four purged walk-forward folds, mean over folds).**
+
+| Risk candidate | Mean AUC | | Ranking candidate (20 sessions) | Mean rank IC |
+|---|---:|---|---|---:|
+| R-v4 persistence | 0.615 | | K-v2 12-1 momentum | 0.053 |
+| R-v4 logistic | 0.678 | | K-v2 logistic | 0.072 |
+| R-v4 gbm | 0.677 | | **K-v2 gbm** (selected) | **0.086** |
+| **R-v4 ensemble** (selected) | **0.684** | | K-v2 ensemble | 0.083 |
+| R-wide ensemble | 0.684 | | K-wide gbm | 0.086 |
+| R-gbm+ ensemble | 0.685 | | K-gbm+ gbm | 0.088 |
+
+The extra cross-sectional inputs and larger boosting models scored within the 0.002 tie margin of
+v4's and v2's own methods, so the simpler unchanged methods were selected for both. The four other
+ranking factors and the remaining risk candidates scored lower.
+
+**Holdout, scored once.**
+
+| Gate | Result | Required | |
+|---|---|---|---|
+| 1. Risk AUC, wide universe | **0.752** | ≥ 0.779 | **fail** |
+| 2. Risk AUC on the 174 shared stocks (76,866 stock-dates) | wide **0.781** vs v4 **0.790** | ≥ v4 − 0.005 = 0.785 | **fail** |
+| 3. Ranking, 20 sessions: mean IC, lower 95% bound | **+0.070** (+0.023 to +0.113) | > 0 | pass |
+| 3. Top-20 portfolio excess return vs universe, after 20 bps costs | **+5.3% a year** | > 0 | pass |
+
+**The wide models are not used.** Under the protocol, a failed gate 1 or 2 means nothing from the
+wide study is used: no shadow account and no risk tiers on stock pages.
+
+**Risk.** Volatility in the added small and micro caps is harder to forecast: AUC 0.752 against
+0.790 on v4's large and mid caps. Accuracy is 68.6% (65.2–72.1). The tiers still separate: 79%
+precision at the elevated threshold and 79% at the calm one. On the stocks both models cover, the
+wide model is 0.009 AUC worse than v4. Twenty years and four times the stocks did not improve
+the core.
+
+**Ranking.** This is the strongest ranking result Polaris has produced.
+
+* **The edge.** Rank IC of +0.070 is positive on 74% of days (t = 2.2 on 23 non-overlapping
+  periods), with quintiles in order and top minus bottom +1.3% per 20 sessions. For comparison,
+  pulse-rank-v2's 20-session holdout gave +0.025 with a range crossing zero, on almost the same dates.
+* **The portfolio.** The top 20 returned 7.7% a year after costs, against 2.4% for the equal-weight
+  universe and −3.5% for NIFTY 50. Drawdown at rebalances was −17.9%.
+* **The caveats.**
+  * The excess ranges from −4.3% to +16.7% depending on the start day.
+  * Survivorship bias is stronger here than for v4. Today's Total Market list includes small caps
+    that joined it by rising, which flatters any signal that favours past winners.
+
+It passed its gate, but by the protocol it is not used on its own.
+
+**What this changes.** Nothing in the live product. v4 stays the only model trading. The wide
+holdout is now spent, so a wide ranking model could only be judged forward, from a new
+pre-registration, never by re-scoring these dates.
+
+---
+
 ## Filing reader, stage 1b: letter-style filings only — 21 October 2026 (gate not passed; reader paused)
 
 Protocol: `ml/FILING_READER_PROTOCOL.md`, stage 1b (5d5c167, committed before the sample was drawn).
