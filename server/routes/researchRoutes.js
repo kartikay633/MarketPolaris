@@ -2,7 +2,7 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { researchStatus, researchChat, validateChat } from '../research/service.js';
 import { buildPlan, reviewPortfolio, validatePlan, validateReview } from '../research/advisor.js';
-import { botSummaries } from '../research/bots.js';
+import { botSummaries, heldSymbols } from '../research/bots.js';
 import { DATA_DIR, readJson } from '../research/marketData.js';
 import { getMarketStatus } from '../utils/marketHours.js';
 import path from 'node:path';
@@ -49,8 +49,13 @@ async function livePrices(now = new Date()) {
     const { upstoxProvider } = await import('../providers/UpstoxProvider.js');
     const snap = await upstoxProvider.getSnapshot();
     if (snap?.source !== 'live') return null;
-    return { asOf: snap.asOf, session: ist.toISOString().slice(0, 10), open: market.status === 'OPEN',
-      prices: new Map(snap.stocks.map(s => [s.symbol.replace(/^NSE:/, ''), s.ltp])),
+    const prices = new Map(snap.stocks.map(s => [s.symbol.replace(/^NSE:/, ''), s.ltp]));
+    // The v5 shadow account holds stocks outside the 175-stock snapshot: quote those one by one.
+    const missing = (await heldSymbols()).filter(symbol => !prices.has(symbol)).slice(0, 40);
+    await Promise.all(missing.map(async symbol => {
+      try { const q = await upstoxProvider.getQuote(symbol); if (q?.source === 'live' && q.ltp > 0) prices.set(symbol, q.ltp); } catch { /* valued at the close */ }
+    }));
+    return { asOf: snap.asOf, session: ist.toISOString().slice(0, 10), open: market.status === 'OPEN', prices,
       nifty: snap.indices.find(i => i.symbol === 'NIFTY_50')?.value ?? null };
   } catch { return null; }
 }

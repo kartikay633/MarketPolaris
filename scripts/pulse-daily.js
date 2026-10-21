@@ -41,6 +41,8 @@ steps.advisor=await run(steps.update===0?'all':'score','scripts/pulse-advisor.js
 // AI paper accounts trade only on fresh outlooks.
 if(steps.update===0) steps.bots=await run('step','scripts/pulse-bots.js');
 const ok=steps.update===0&&steps.forward===0&&steps.advisor===0&&(steps.bots??0)===0;
+// The v5 shadow account (ml/V5_PROTOCOL.md) runs after v4 and never affects v4's status.
+if(steps.update===0) steps.v5=await run('nightly','scripts/pulse-v5.js');
 const status={startedAt,finishedAt:new Date().toISOString(),status:ok?'ok':'failed',steps};
 await mkdir(path.join(dataDir,'reports'),{recursive:true});
 const target=path.join(dataDir,'reports/daily-run.json');

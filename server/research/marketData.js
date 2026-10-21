@@ -57,7 +57,7 @@ export function validateCandles(candles, lastDate, firstDate = '2000-01-01') {
 export function mergeCandles(oldRows, newRows) {
   return [...new Map([...oldRows, ...newRows].map(row => [row[0].slice(0,10), row])).values()].sort((a,b) => a[0].localeCompare(b[0]));
 }
-async function request(url, token, binary = false) {
+export async function request(url, token, binary = false) {
   for (let attempt = 0; attempt < 4; attempt++) {
     let response;
     try {

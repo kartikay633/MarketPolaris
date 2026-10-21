@@ -7,10 +7,15 @@ import { buildPlan, reviewPortfolio } from './advisor.js';
 // (so it never trades on a price it could not have had), pays realistic costs, and
 // writes a post-mortem for every losing exit. Records are append-only.
 
+// Each bot reads its forecasts and prices from its own data folder (v5: the wide universe in
+// data/pulse-wide); account files all live in the main data folder's bots/.
+export const WIDE_DIR = path.resolve('data/pulse-wide');
 export const BOTS = [
-  { id: 'pulse-v4', label: 'Polaris AI v4', riskFile: 'risk-predictions.json', description: 'Live models: peer ranking + volatility v4 sizing' },
-  { id: 'pulse-v5', label: 'Polaris AI v5 (shadow)', riskFile: 'risk-predictions-v5.json', description: 'Shadow models under evaluation; starts when v5 forecasts exist' },
+  { id: 'pulse-v4', label: 'Polaris AI v4', rankFile: 'predictions.json', riskFile: 'risk-predictions.json', description: 'Live models: peer ranking + volatility v4 sizing' },
+  { id: 'pulse-v5', label: 'Polaris AI v5 (shadow)', dataDir: WIDE_DIR, rankFile: 'predictions-v5.json', riskFile: 'risk-predictions-v5.json',
+    description: 'Shadow model under evaluation: chooses from about 750 NSE stocks, buying only those trading at least ₹10 crore a day' },
 ];
+const botDir = (bot, dataDir, dirs = {}) => dirs[bot.id] || bot.dataDir || dataDir;
 export const START_CASH = 200000;
 export const COST = .0012; // per side: brokerage, STT and exchange charges, approximated
 const POLICY = { horizon: '1m', risk: 'balanced' };
@@ -110,13 +115,13 @@ async function markToMarket(state, prices, asOf) {
   return value;
 }
 
-async function decide(state, prices, dataDir, sessions, asOf, equity) {
+async function decide(state, prices, dataDir, sessions, asOf, equity, bot) {
   const held = Object.keys(state.positions);
   const since = state.lastRebalanceAsOf ? sessions.filter(d => d > state.lastRebalanceAsOf && d <= asOf).length : Infinity;
   const orders = [];
   const budget = Math.floor(equity);
   if (since >= REBALANCE_EVERY) {
-    const plan = await buildPlan({ budget, ...POLICY }, { dataDir, riskFile: state.riskFile });
+    const plan = await buildPlan({ budget, ...POLICY }, { dataDir, riskFile: bot.riskFile, rankFile: bot.rankFile });
     const target = Object.fromEntries(plan.holdings.map(h => [h.symbol, h]));
     for (const symbol of held) if (!target[symbol]) orders.push({ side: 'SELL', symbol, quantity: state.positions[symbol].quantity, reason: 'Monthly rebalance: no longer among the top-ranked, risk-sized picks' });
     for (const h of plan.holdings) {
@@ -130,7 +135,7 @@ async function decide(state, prices, dataDir, sessions, asOf, equity) {
     const positions = [];
     for (const symbol of held) positions.push({ symbol: `NSE:${symbol}`, quantity: state.positions[symbol].quantity, avgPrice: state.positions[symbol].avgPrice,
       currentPrice: (await prices.closeAtOrBefore(symbol, asOf)) ?? state.positions[symbol].avgPrice });
-    const review = await reviewPortfolio({ budget, ...POLICY, cash: Math.max(0, state.cash), positions }, { dataDir, riskFile: state.riskFile });
+    const review = await reviewPortfolio({ budget, ...POLICY, cash: Math.max(0, state.cash), positions }, { dataDir, riskFile: bot.riskFile, rankFile: bot.rankFile });
     for (const a of review.actions) {
       if (!a.quantity || !['sell', 'trim', 'add'].includes(a.action)) continue;
       orders.push({ side: a.action === 'add' ? 'BUY' : 'SELL', symbol: a.symbol, quantity: a.quantity, riskTier: a.riskTier, reason: `Daily check-up (${a.action}): ${a.reasons.join('; ')}` });
@@ -142,39 +147,53 @@ async function decide(state, prices, dataDir, sessions, asOf, equity) {
 }
 
 // One evening step for every bot: fill yesterday's decisions at today's open, value
-// the account at today's close, then decide tomorrow's orders. Safe to run twice.
-export async function runBots(dataDir = DATA_DIR) {
-  const predictions = await readJson(path.join(dataDir, 'predictions.json'));
-  if (!predictions?.asOf) throw new Error('Model outlooks are unavailable');
-  const asOf = predictions.asOf;
-  const prices = new Prices(dataDir);
-  const sessions = await prices.sessions();
+// the account at today's close, then decide tomorrow's orders. Safe to run twice, and run
+// again after a later model's forecasts land (bots already up to date are left alone).
+// dirs overrides a bot's data folder (tests).
+export async function runBots(dataDir = DATA_DIR, { dirs } = {}) {
   const out = [];
+  let asOf = null;
   for (const bot of BOTS) {
+    const dir = botDir(bot, dataDir, dirs);
+    const predictions = await readJson(path.join(dir, bot.rankFile));
     const file = path.join(dataDir, 'bots', `${bot.id}.json`);
     let state = await readJson(file);
-    const risk = await readJson(path.join(dataDir, bot.riskFile));
-    if (!state && risk?.asOf !== asOf) { out.push({ id: bot.id, status: 'waiting for model forecasts' }); continue; }
-    if (risk?.asOf !== asOf) { out.push({ id: bot.id, status: 'skipped: forecasts not refreshed' }); continue; }
-    state ||= fresh(bot, asOf);
-    if (state.lastDecisionAsOf && state.lastDecisionAsOf >= asOf) { out.push({ id: bot.id, status: 'already up to date' }); continue; }
-    await execute(state, prices, dataDir, sessions, asOf);
-    const equity = await markToMarket(state, prices, asOf);
-    await decide(state, prices, dataDir, sessions, asOf, equity);
+    if (!predictions?.asOf) { out.push({ id: bot.id, status: state ? 'skipped: forecasts not refreshed' : 'waiting for model forecasts' }); continue; }
+    const botAsOf = predictions.asOf;
+    asOf ??= botAsOf;
+    const risk = await readJson(path.join(dir, bot.riskFile));
+    if (!state && risk?.asOf !== botAsOf) { out.push({ id: bot.id, status: 'waiting for model forecasts' }); continue; }
+    if (risk?.asOf !== botAsOf) { out.push({ id: bot.id, status: 'skipped: forecasts not refreshed' }); continue; }
+    state ||= fresh(bot, botAsOf);
+    if (state.lastDecisionAsOf && state.lastDecisionAsOf >= botAsOf) { out.push({ id: bot.id, status: 'already up to date' }); continue; }
+    const prices = new Prices(dir);
+    const sessions = await prices.sessions();
+    await execute(state, prices, dir, sessions, botAsOf);
+    const equity = await markToMarket(state, prices, botAsOf);
+    await decide(state, prices, dir, sessions, botAsOf, equity, bot);
     state.riskModel = risk.modelVersion;
+    state.rankModel = predictions.modelVersion || null;
     await atomicJson(file, state);
-    out.push({ id: bot.id, status: 'ok', equity: round(equity), positions: Object.keys(state.positions).length, pending: state.pending.length });
+    out.push({ id: bot.id, status: 'ok', asOf: botAsOf, equity: round(equity), positions: Object.keys(state.positions).length, pending: state.pending.length });
   }
+  if (!asOf) throw new Error('Model outlooks are unavailable');
   return { asOf, bots: out };
+}
+
+// Symbols the running bots hold, so live quotes can be fetched for stocks outside the snapshot.
+export async function heldSymbols(dataDir = DATA_DIR) {
+  const held = new Set();
+  for (const bot of BOTS) for (const symbol of Object.keys((await readJson(path.join(dataDir, 'bots', `${bot.id}.json`)))?.positions || {})) held.add(symbol);
+  return [...held];
 }
 
 // Read-only summary for the AI Portfolios page. With `live` ({ asOf, session, open, prices: Map of
 // symbol -> last price, nifty }), holdings are valued at live prices once the live session is newer
 // than the last evening close. Display only: the account file and its equity history are untouched.
-export async function botSummaries(dataDir = DATA_DIR, live = null) {
-  const prices = new Prices(dataDir);
+export async function botSummaries(dataDir = DATA_DIR, live = null, { dirs } = {}) {
   const result = [];
   for (const bot of BOTS) {
+    const prices = new Prices(botDir(bot, dataDir, dirs));
     const s = await readJson(path.join(dataDir, 'bots', `${bot.id}.json`));
     if (!s) { result.push({ id: bot.id, label: bot.label, description: bot.description, status: 'not started' }); continue; }
     const last = s.equity.at(-1), first = s.equity[0];

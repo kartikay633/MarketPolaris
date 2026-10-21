@@ -31,22 +31,29 @@ async function publish(dir, k, { v5 = false } = {}) {
   }
   await writeFile(path.join(dir, 'predictions.json'), JSON.stringify({ asOf, predictions: rank }));
   await writeFile(path.join(dir, 'risk-predictions.json'), JSON.stringify({ asOf, modelVersion: 'risk-test', predictions: risk }));
-  if (v5) await writeFile(path.join(dir, 'risk-predictions-v5.json'), JSON.stringify({ asOf, modelVersion: 'risk-v5-test', predictions: risk }));
+  if (v5) {
+    // v5's own forecasts; the top-ranked stock is below its liquidity rule and must never be bought.
+    await writeFile(path.join(dir, 'predictions-v5.json'), JSON.stringify({ asOf, modelVersion: 'rank-v5-test', predictions: rank.map(p => ({ ...p, tradable: p.symbol !== 'S00' })) }));
+    await writeFile(path.join(dir, 'risk-predictions-v5.json'), JSON.stringify({ asOf, modelVersion: 'risk-v5-test', predictions: risk }));
+  } else {
+    for (const name of ['predictions-v5.json', 'risk-predictions-v5.json']) await rm(path.join(dir, name), { force: true });
+  }
 }
 
 test('bots decide in the evening, fill at the next open, pay costs and never add money', async t => {
   const dir = await fixture(t);
+  const dirs = { 'pulse-v5': dir };
   await publish(dir, 9);
-  const first = await runBots(dir);
+  const first = await runBots(dir, { dirs });
   assert.equal(first.bots.find(b => b.id === 'pulse-v4').status, 'ok');
   assert.equal(first.bots.find(b => b.id === 'pulse-v5').status, 'waiting for model forecasts');
   let state = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v4.json'), 'utf8'));
   assert.equal(state.cash, START_CASH);
   assert.ok(state.pending.length > 0 && state.trades.length === 0, 'nothing fills on the decision day');
-  assert.equal((await runBots(dir)).bots[0].status, 'already up to date');
+  assert.equal((await runBots(dir, { dirs })).bots[0].status, 'already up to date');
 
   await publish(dir, 10);
-  await runBots(dir);
+  await runBots(dir, { dirs });
   state = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v4.json'), 'utf8'));
   const buys = state.trades.filter(t => t.side === 'BUY' && t.status === 'filled');
   assert.ok(buys.length > 0);
@@ -61,16 +68,20 @@ test('bots decide in the evening, fill at the next open, pay costs and never add
 
 test('a losing exit gets a post-mortem and the v5 bot starts only with v5 forecasts', async t => {
   const dir = await fixture(t);
+  const dirs = { 'pulse-v5': dir };
   for (let k = 9; k <= 30; k++) await publish(dir, k, { v5: k >= 20 });
   // Replay evenings one at a time; S03 keeps falling until the check-up sells it.
-  for (let k = 9; k <= 30; k++) { await publish(dir, k, { v5: k >= 20 }); await runBots(dir); }
+  for (let k = 9; k <= 30; k++) { await publish(dir, k, { v5: k >= 20 }); await runBots(dir, { dirs }); }
   const v4 = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v4.json'), 'utf8'));
   const sold = v4.trades.find(t => t.symbol === 'S03' && t.side === 'SELL' && t.status === 'filled');
   assert.ok(sold && sold.pnl < 0, 'the falling stock was sold at a loss');
   assert.ok(v4.learnings.some(l => l.symbol === 'S03' && l.category && l.lesson));
   const v5 = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v5.json'), 'utf8'));
   assert.equal(v5.startAsOf, dates[20]);
-  const summaries = await botSummaries(dir);
+  assert.ok(v5.trades.some(t => t.side === 'BUY' && t.status === 'filled'), 'v5 trades on its own forecasts');
+  assert.ok(v5.trades.every(t => t.symbol !== 'S00'), 'a stock below the liquidity rule is never bought');
+  assert.equal(v5.rankModel, 'rank-v5-test');
+  const summaries = await botSummaries(dir, null, { dirs });
   assert.equal(summaries.length, 2);
   assert.ok(summaries.every(s => s.status === 'running' && Number.isFinite(s.returnPct)));
   assert.ok(summaries.every(s => s.pricing.source === 'close'));
@@ -79,12 +90,12 @@ test('a losing exit gets a post-mortem and the v5 bot starts only with v5 foreca
   const held = summaries[0].positions.map(p => p.symbol);
   assert.ok(held.length > 0);
   const up = new Map(held.map(symbol => [symbol, summaries[0].positions.find(p => p.symbol === symbol).price + 2]));
-  const [liveV4] = await botSummaries(dir, { asOf: '2099-01-01T05:00:00.000Z', session: '2099-01-01', prices: up, nifty: null });
+  const [liveV4] = await botSummaries(dir, { asOf: '2099-01-01T05:00:00.000Z', session: '2099-01-01', prices: up, nifty: null }, { dirs });
   assert.equal(liveV4.pricing.source, 'live');
   liveV4.positions.forEach(p => assert.ok(Math.abs(p.unrealized - p.quantity * (up.get(p.symbol) - p.avgPrice)) < 0.01));
   const gain = summaries[0].positions.reduce((sum, p) => sum + p.quantity * 2, 0);
   assert.ok(Math.abs(liveV4.value - (summaries[0].value + gain)) < 1);
-  const [sameDay] = await botSummaries(dir, { asOf: '', session: summaries[0].asOf, prices: up, nifty: null });
+  const [sameDay] = await botSummaries(dir, { asOf: '', session: summaries[0].asOf, prices: up, nifty: null }, { dirs });
   assert.equal(sameDay.pricing.source, 'close');
   const after = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v4.json'), 'utf8'));
   assert.equal(after.equity.length, v4.equity.length, 'live valuation never writes to the account');

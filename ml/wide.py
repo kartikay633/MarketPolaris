@@ -138,21 +138,29 @@ def keep(d, families, extra):
     return d[list(dict.fromkeys(c for c in cols if c in d.columns))].copy()
 
 
-def risk_data(frames, meta, root=ROOT):
+def risk_long(frames, meta, root=ROOT):
+    """Every stock-session of the risk panel, labelled or not (the latest sessions are forecast by ml.v5)."""
     log("building the risk panel")
     long = risk.risk_panel(frames, meta, root)
     lr = long.x_lr_vol20
     long["w_sector_vol_rel"] = lr - lr.groupby([long.date, long.sector]).transform("median")
     long["w_cs_vol_rank"] = lr.groupby(long.date).rank(pct=True) - .5
     long["w_stress_breadth"] = (lr > 0).astype(float).where(lr.notna()).groupby(long.date).transform("mean")
-    d = keep(risk.risk_frame(shrink(long)), RISK_FAMILIES, ["y", "future_vol", "normal_vol", "future_vs_normal", "vol_vs_normal"])
+    return shrink(long)
+
+
+def risk_data(frames, meta, root=ROOT, full=False):
+    long = risk_long(frames, meta, root)
+    d = risk.risk_frame(long)  # full: every column, for the v5 search (ml/v5.py)
+    d = d if full else keep(d, RISK_FAMILIES, ["y", "future_vol", "normal_vol", "future_vs_normal", "vol_vs_normal"])
     del long
     gc.collect()
     log(f"risk rows {len(d):,}, sessions {d.date.nunique()}, stocks {d.symbol.nunique()}")
     return d
 
 
-def rank_data(frames, meta, h=20):
+def rank_long(frames, meta):
+    """Every stock-session of the ranking panel, labelled or not."""
     log("building the ranking panel")
     long = rank.build_panel(frames, meta)
     cal = frames[rank.CALENDAR].index
@@ -171,8 +179,13 @@ def rank_data(frames, meta, h=20):
     idx = pd.MultiIndex.from_arrays([long.date, long.symbol])
     raw = rel.stack(future_stack=True).reindex(idx).to_numpy()
     long["cs_rel_sector_120"] = pd.Series(raw, index=long.index).groupby(long.date).rank(pct=True) - .5
-    d = keep(rank.horizon_frame(shrink(long), h), RANK_FAMILIES,
-             ["y_peer", "fwd", "excess", f"bench_{h}"] + [c for c, _ in rank.FACTORS.values()])
+    return shrink(long)
+
+
+def rank_data(frames, meta, h=20, full=False):
+    long = rank_long(frames, meta)
+    d = rank.horizon_frame(long, h)
+    d = d if full else keep(d, RANK_FAMILIES, ["y_peer", "fwd", "excess", f"bench_{h}"] + [c for c, _ in rank.FACTORS.values()])
     del long
     gc.collect()
     log(f"ranking h={h} rows {len(d):,}, sessions {d.date.nunique()}, stocks {d.symbol.nunique()}")

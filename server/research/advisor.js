@@ -60,9 +60,9 @@ async function latestCloses(dataDir, asOf, symbols) {
   return closes;
 }
 
-// riskFile selects which volatility model sizes the plan (the live model by default; AI paper bots may use a shadow model).
-async function loadSignals(dataDir, riskFile = 'risk-predictions.json') {
-  const [rank, risk] = await Promise.all([readJson(path.join(dataDir, 'predictions.json')), readJson(path.join(dataDir, riskFile))]);
+// rankFile and riskFile select the models (the live ones by default; an AI paper bot may use a shadow model).
+async function loadSignals(dataDir, riskFile = 'risk-predictions.json', rankFile = 'predictions.json') {
+  const [rank, risk] = await Promise.all([readJson(path.join(dataDir, rankFile)), readJson(path.join(dataDir, riskFile))]);
   if (!rank?.predictions?.length || !risk?.predictions?.length) throw new Error('Model outlooks are unavailable');
   const riskBy = Object.fromEntries(risk.predictions.map(r => [r.symbol, r]));
   const symbols = [...new Set(rank.predictions.map(p => p.symbol))];
@@ -84,11 +84,12 @@ function reasons(p, r) {
   return out;
 }
 
-export async function buildPlan(body, { dataDir = DATA_DIR, record = false, source = 'user', riskFile } = {}) {
+export async function buildPlan(body, { dataDir = DATA_DIR, record = false, source = 'user', riskFile, rankFile } = {}) {
   const input = validatePlan(body);
   const horizon = HORIZONS[input.horizon], profile = PROFILES[input.risk];
-  const signals = await loadSignals(dataDir, riskFile);
-  const candidates = signals.rank.filter(p => p.horizon === horizon.signal && signals.riskBy[p.symbol])
+  const signals = await loadSignals(dataDir, riskFile, rankFile);
+  // tradable: false marks a stock below a model's liquidity rule (v5: ₹10 crore a day); it is never bought.
+  const candidates = signals.rank.filter(p => p.horizon === horizon.signal && signals.riskBy[p.symbol] && p.tradable !== false)
     .filter(p => profile.elevated !== 'exclude' || signals.riskBy[p.symbol].riskTier !== 'elevated')
     .sort((a, b) => b.probabilityOutperformPeers - a.probabilityOutperformPeers);
   const closes = await latestCloses(dataDir, signals.asOf, signals.symbols);
@@ -165,10 +166,10 @@ export async function buildPlan(body, { dataDir = DATA_DIR, record = false, sour
 }
 
 // Daily check-up for held positions: buy more, hold, trim or sell, with reasons.
-export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile } = {}) {
+export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile, rankFile } = {}) {
   const input = validateReview(body);
   const horizon = HORIZONS[input.horizon], profile = PROFILES[input.risk];
-  const signals = await loadSignals(dataDir, riskFile);
+  const signals = await loadSignals(dataDir, riskFile, rankFile);
   const bySymbol = Object.fromEntries(signals.rank.filter(p => p.horizon === horizon.signal).map(p => [p.symbol, p]));
   const closes = await latestCloses(dataDir, signals.asOf, signals.symbols);
   const value = p => p.quantity * (p.currentPrice || closes[clean(p.symbol)]?.close || p.avgPrice);
@@ -202,7 +203,7 @@ export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile } = {
       const target = r.riskTier === 'elevated' ? profile.maxWeight * .5 : profile.maxWeight;
       quantity = Math.max(1, Math.floor((weight - target) * total / price));
       why.push(weight > profile.maxWeight * 1.4 ? `Position is ${Math.round(weight * 100)}% of your portfolio; the plan limit is ${Math.round(profile.maxWeight * 100)}%` : 'Volatility expected to be larger than usual; reduce exposure');
-    } else if (p.tier === 'top quintile' && r.riskTier !== 'elevated' && weight < targetOf(symbol) * .7 && spare > price) {
+    } else if (p.tier === 'top quintile' && r.riskTier !== 'elevated' && p.tradable !== false && weight < targetOf(symbol) * .7 && spare > price) {
       action = 'add';
       quantity = Math.max(1, Math.floor(Math.min(targetOf(symbol) - weight, spare / total) * total / price));
       why.push('Still ranked in the top fifth of covered stocks', 'Position is below its planned size');
@@ -212,7 +213,7 @@ export async function reviewPortfolio(body, { dataDir = DATA_DIR, riskFile } = {
     return { symbol, action, quantity, price, weight, riskTier: r.riskTier, rankPercentile: p.peerRankPercentile, reasons: why };
   });
   const held = new Set(actions.map(a => a.symbol));
-  const ideas = signals.rank.filter(p => p.horizon === horizon.signal && !held.has(p.symbol) && signals.riskBy[p.symbol]?.riskTier !== 'elevated' && closes[p.symbol])
+  const ideas = signals.rank.filter(p => p.horizon === horizon.signal && !held.has(p.symbol) && p.tradable !== false && signals.riskBy[p.symbol]?.riskTier !== 'elevated' && closes[p.symbol])
     .sort((a, b) => b.probabilityOutperformPeers - a.probabilityOutperformPeers).slice(0, 5)
     .map(p => ({ symbol: p.symbol, sector: p.sector, price: closes[p.symbol].close, rankPercentile: p.peerRankPercentile, riskTier: signals.riskBy[p.symbol].riskTier }));
   return { asOf: signals.asOf, generatedAt: new Date().toISOString(), horizon: horizon.label, profile: profile.label, actions, ideas,

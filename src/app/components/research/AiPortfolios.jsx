@@ -55,6 +55,25 @@ function BotCard({ bot }) {
   </section>;
 }
 
+// Head to head over the same days: every running account and NIFTY 50, rebased to the latest start date.
+function HeadToHead({ bots }) {
+  const running = bots.filter(b => b.status === 'running' && b.equity?.length);
+  if (running.length < 2) return null;
+  const since = running.map(b => b.startAsOf).sort().at(-1);
+  const rows = running.map(b => {
+    const from = b.equity.find(e => e.date >= since);
+    return from ? { id: b.id, label: b.label, ret: b.value / from.value - 1, nifty: b.equity.at(-1)?.nifty && from.nifty ? b.equity.at(-1).nifty / from.nifty - 1 : null } : null;
+  }).filter(Boolean);
+  if (rows.length < 2) return null;
+  const nifty = rows.find(r => Number.isFinite(r.nifty))?.nifty;
+  return <section className="pr-panel"><header className="pr-panel-heading"><div><h2>Head to head</h2>
+    <p>Each account's return since {date(since)}, when the newest one started, so both are measured over the same days.</p></div></header>
+    <div className="pr-metrics pr-panel-body">
+      {rows.map(r => <Metric key={r.id} label={r.label} value={pct(r.ret)} detail={Number.isFinite(nifty) ? `${pct(r.ret - nifty)} versus NIFTY 50` : null} />)}
+      {Number.isFinite(nifty) && <Metric label="NIFTY 50" value={pct(nifty)} detail="Same period" />}
+    </div></section>;
+}
+
 export default function AiPortfolios() {
   // Every 30 s while the market is open (the server's quote snapshot refreshes about every 15 s), else every 5 min.
   const bots = useQuery({ queryKey: ['pulse-bots'], queryFn: async () => (await api.get('/research/bots')).data.bots, staleTime: 15000,
@@ -63,6 +82,7 @@ export default function AiPortfolios() {
     <div className="pr-note">Polaris AI trades these paper accounts on its own. Each started with ₹2,00,000 and can never add money. Decisions are made after the evening data update and filled at the next market open, with brokerage and taxes deducted. Paper trading only; not investment advice.</div>
     {bots.isPending && <div className="pr-loading" role="status">Loading AI portfolios…</div>}
     {bots.isError && <div className="pr-note pr-note--error" role="alert">AI portfolios are unavailable right now.</div>}
+    {bots.data && <HeadToHead bots={bots.data} />}
     {bots.data?.map(bot => <BotCard key={bot.id} bot={bot} />)}
   </div>;
 }
