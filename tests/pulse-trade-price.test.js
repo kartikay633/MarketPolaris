@@ -21,15 +21,23 @@ function stubQuote(t, quote) {
   t.after(() => { marketDataService.getQuote = original; });
 }
 
+const open = { isOpen: () => true };
+
 test('paper orders never fill at a fallback price', async t => {
   stubQuote(t, { ltp: 1250, source: 'fallback' });
-  const service = new TradeService(memoryRepository());
+  const service = new TradeService(memoryRepository(), open);
   await assert.rejects(service.executeOrder('u', { symbol: 'NSE:ABC', type: 'BUY', quantity: 1 }), /Live price/);
+});
+
+test('paper orders never fill while the market is closed', async t => {
+  stubQuote(t, { ltp: 2060.1, source: 'live' });
+  const service = new TradeService(memoryRepository(), { isOpen: () => false });
+  await assert.rejects(service.executeOrder('u', { symbol: 'NSE:ABC', type: 'BUY', quantity: 1 }), /market is closed/);
 });
 
 test('paper orders fill at live prices and holdings are valued only at live prices', async t => {
   stubQuote(t, { ltp: 2060.1, change: 10, changePercent: .5, source: 'live' });
-  const service = new TradeService(memoryRepository());
+  const service = new TradeService(memoryRepository(), open);
   const result = await service.executeOrder('u', { symbol: 'NSE:ABC', type: 'BUY', quantity: 2 });
   assert.equal(result.order.price, 2060.1);
   marketDataService.getQuote = async symbol => ({ symbol, ltp: 1250, source: 'fallback' });

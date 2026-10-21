@@ -51,7 +51,7 @@ export class TradeController {
       const result = await tradeService.addFunds(userId, amount);
       res.json(result);
     } catch (err) {
-      next(err);
+      res.status(400).json({ error: err.message, code: 'TRADE_ERROR' });
     }
   }
 }

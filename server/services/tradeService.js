@@ -1,11 +1,13 @@
 // ROADMAP: Section 6, 11 & Phase 6 — Paper Trade Engine Implementation
 import { tradeRepository } from '../repositories/tradeRepository.js';
 import { marketDataService } from './marketDataService.js';
+import { isMarketOpen } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
 
 export class TradeService {
-  constructor(repository = tradeRepository) {
+  constructor(repository = tradeRepository, { isOpen = isMarketOpen } = {}) {
     this.repository = repository;
+    this.isOpen = isOpen;
   }
 
   async executeOrder(userId, { symbol, type, quantity }) {
@@ -21,6 +23,10 @@ export class TradeService {
     }
     if (orderType !== 'BUY' && orderType !== 'SELL') {
       throw new Error('Order type must be either BUY or SELL');
+    }
+    // Outside trading hours the feed's last price is stale, so nothing fills until the market opens.
+    if (!this.isOpen()) {
+      throw new Error('The market is closed. Paper orders fill at the live price from 9:15 AM to 3:30 PM IST on trading days.');
     }
 
     // 1. Fetch live execution price (server-side determined)
@@ -214,8 +220,8 @@ export class TradeService {
 
   async addFunds(userId, amount) {
     const amt = parseFloat(amount);
-    if (isNaN(amt) || amt <= 0) {
-      throw new Error('Amount must be a positive number');
+    if (isNaN(amt) || amt <= 0 || amt > 1e9) {
+      throw new Error('Amount must be a positive number up to ₹100 crore');
     }
     const res = await this.repository.addFunds(userId, amt);
     logger.info({ userId, amt, newBalance: res.cashBalance }, 'Added simulated virtual funds to paper account');

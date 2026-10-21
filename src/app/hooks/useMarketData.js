@@ -93,6 +93,7 @@ export function stockQuoteQuery(symbol) {
   };
 }
 
+// Refreshed every 15 s so a page showing one stock (the trade ticket) follows the live price.
 export function useStockQuote(symbol) {
-  return useQuery(stockQuoteQuery(symbol));
+  return useQuery({ ...stockQuoteQuery(symbol), refetchInterval: 15000 });
 }

@@ -105,9 +105,6 @@ export default function TradePage() {
   const [selectedSymbol, setSelectedSymbol] = useState(urlSymbol);
   const [customInput, setCustomInput] = useState('');
   const [orderType, setOrderType] = useState('BUY'); // 'BUY' | 'SELL'
-  const [productType, setProductType] = useState('CNC'); // 'CNC' (1x Delivery) | 'MIS' (5x Intraday)
-  const [executionType, setExecutionType] = useState('MARKET'); // 'MARKET' | 'LIMIT'
-  const [limitPrice, setLimitPrice] = useState('');
   const [quantity, setQuantity] = useState(10);
   const [isSuccessGlow, setIsSuccessGlow] = useState(false);
 
@@ -145,32 +142,19 @@ export default function TradePage() {
   const ltp = quote?.ltp || 0;
   const isPositive = (quote?.change ?? 0) >= 0;
 
-  // Initialize or update limit price default when LTP changes
-  useEffect(() => {
-    if (ltp && (!limitPrice || executionType === 'MARKET')) {
-      setLimitPrice(ltp.toFixed(2));
-    }
-  }, [ltp, executionType]);
-
-  // Determine effective execution price
-  const effectivePrice = executionType === 'LIMIT' && limitPrice && !isNaN(limitPrice)
-    ? parseFloat(limitPrice)
-    : ltp;
+  // The paper engine fills delivery market orders at the live price (no limit orders, no leverage),
+  // so the estimate uses the live price and the full order value.
+  const effectivePrice = ltp;
+  const marketOpen = quote?.marketStatus === 'OPEN';
 
   // Calculations
   const grossValue = Number((quantity * effectivePrice).toFixed(2));
-  // CNC requires 100% cash; MIS requires 20% (5x intraday margin)
-  const requiredMargin = productType === 'MIS'
-    ? Number((grossValue / 5).toFixed(2))
-    : grossValue;
-
-  const buyingPowerCNC = cashBalance;
-  const buyingPowerMIS = cashBalance * 5;
-  const currentBuyingPower = productType === 'MIS' ? buyingPowerMIS : buyingPowerCNC;
+  const requiredMargin = grossValue;
 
   // Validation
-  const canBuy = orderType === 'BUY' && cashBalance >= requiredMargin && quantity > 0 && effectivePrice > 0;
+  const canBuy = marketOpen && orderType === 'BUY' && cashBalance >= requiredMargin && quantity > 0 && effectivePrice > 0;
   const canSell =
+    marketOpen &&
     orderType === 'SELL' &&
     currentPosition &&
     currentPosition.quantity >= quantity &&
@@ -260,8 +244,7 @@ export default function TradePage() {
   const handleSetAllocation = (percent) => {
     if (!effectivePrice || effectivePrice <= 0) return;
     const availableAllocated = cashBalance * (percent / 100);
-    const leverageFactor = productType === 'MIS' ? 5 : 1;
-    const maxAffordable = Math.floor((availableAllocated * leverageFactor) / effectivePrice);
+    const maxAffordable = Math.floor(availableAllocated / effectivePrice);
     setQuantity(Math.max(1, maxAffordable));
   };
 
@@ -323,29 +306,6 @@ export default function TradePage() {
                 </div>
                 <div className="num-tabular" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
                   ₹{formatIndianNumber(cashBalance)}
-                </div>
-              </div>
-            </div>
-
-            {/* Buying Power Display */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                padding: '8px 16px',
-                borderRadius: 'var(--radius-sm)',
-                backgroundColor: 'var(--surface)',
-                border: '1px solid var(--border)',
-              }}
-            >
-              <Zap size={18} color="var(--positive)" />
-              <div>
-                <div style={{ fontSize: '10px', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Intraday Buying Power (5x)
-                </div>
-                <div className="num-tabular" style={{ fontSize: '15px', fontWeight: 700, color: 'var(--positive)' }}>
-                  ₹{formatIndianNumber(buyingPowerMIS)}
                 </div>
               </div>
             </div>
@@ -647,127 +607,10 @@ export default function TradePage() {
               </button>
             </div>
 
-            {/* Product Type Selector: Delivery (CNC) vs Intraday (MIS 5x) */}
-            <div style={{ marginBottom: '14px' }}>
-              <label className="form-label" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
-                <span>Product Type</span>
-                <span style={{ fontSize: '11px', color: productType === 'MIS' ? 'var(--accent-bright)' : 'var(--text-muted)' }}>
-                  {productType === 'MIS' ? '5x Margin Applied' : 'Cash CNC 1x'}
-                </span>
-              </label>
-
-              <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setProductType('CNC')}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: productType === 'CNC' ? 'rgba(59, 130, 246, 0.16)' : 'var(--surface)',
-                    border: `1px solid ${productType === 'CNC' ? 'var(--accent)' : 'var(--border)'}`,
-                    color: productType === 'CNC' ? 'var(--accent-bright)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 700 }}>Delivery (CNC)</div>
-                  <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>1x Capital • Hold Overnight</div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setProductType('MIS')}
-                  style={{
-                    padding: '8px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: productType === 'MIS' ? 'rgba(16, 185, 129, 0.16)' : 'var(--surface)',
-                    border: `1px solid ${productType === 'MIS' ? 'var(--positive)' : 'var(--border)'}`,
-                    color: productType === 'MIS' ? 'var(--positive)' : 'var(--text-secondary)',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                    transition: 'all 0.15s ease',
-                  }}
-                >
-                  <div style={{ fontSize: '12px', fontWeight: 700 }}>Intraday (MIS)</div>
-                  <div style={{ fontSize: '10.5px', color: 'var(--text-muted)', marginTop: '2px' }}>5x Leverage • Square-off 3:15 PM</div>
-                </button>
-              </div>
+            {/* The paper engine fills delivery (cash) market orders at the live price while the market is open. */}
+            <div style={{ marginBottom: '14px', fontSize: '11.5px', color: 'var(--text-muted)' }}>
+              Delivery order at market price · fills at the live price during market hours (9:15 AM – 3:30 PM IST)
             </div>
-
-            {/* Execution Order Type: Market vs Limit */}
-            <div style={{ marginBottom: '14px' }}>
-              <div className="terminal-pair-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <button
-                  type="button"
-                  onClick={() => setExecutionType('MARKET')}
-                  style={{
-                    padding: '7px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: executionType === 'MARKET' ? 'rgba(255, 255, 255, 0.08)' : 'var(--surface)',
-                    border: `1px solid ${executionType === 'MARKET' ? 'var(--text-primary)' : 'var(--border)'}`,
-                    color: 'var(--text-primary)',
-                    fontSize: '11.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Market (LTP)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setExecutionType('LIMIT')}
-                  style={{
-                    padding: '7px 10px',
-                    borderRadius: 'var(--radius-sm)',
-                    backgroundColor: executionType === 'LIMIT' ? 'rgba(255, 255, 255, 0.08)' : 'var(--surface)',
-                    border: `1px solid ${executionType === 'LIMIT' ? 'var(--text-primary)' : 'var(--border)'}`,
-                    color: 'var(--text-primary)',
-                    fontSize: '11.5px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Limit Price
-                </button>
-              </div>
-
-              {executionType === 'LIMIT' && (
-                <div style={{ marginTop: '6px' }}>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      backgroundColor: 'var(--surface)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <div style={{ padding: '0 12px', color: 'var(--text-muted)', fontSize: '12px' }}>₹</div>
-                    <input
-                      type="number"
-                      step="0.05"
-                      value={limitPrice}
-                      onChange={(e) => setLimitPrice(e.target.value)}
-                      placeholder="Limit execution price"
-                      className="num-tabular"
-                      style={{
-                        flex: 1,
-                        padding: '8px 10px',
-                        background: 'none',
-                        border: 'none',
-                        color: 'var(--text-primary)',
-                        fontSize: '14px',
-                        fontWeight: 600,
-                        outline: 'none',
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Quantity Input */}
             <div style={{ marginBottom: '14px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
@@ -877,7 +720,7 @@ export default function TradePage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12.5px', fontWeight: 600 }}>
                 <span style={{ color: 'var(--accent-bright)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                  Margin Required ({productType === 'MIS' ? '5x Leverage' : '1x Delivery'})
+                  {orderType === 'BUY' ? 'Cash required' : 'Cash received'}
                 </span>
                 <span className="num-tabular" style={{ color: 'var(--accent-bright)', fontSize: '13.5px' }}>
                   ₹{formatIndianNumber(requiredMargin)}
@@ -908,6 +751,13 @@ export default function TradePage() {
                 </span>
               </div>
             </div>
+
+            {quote && !marketOpen && (
+              <div className="alert-box" style={{ marginBottom: '14px' }}>
+                <AlertCircle size={14} />
+                <span>The market is closed, so paper orders cannot fill now. They fill at the live price from 9:15 AM to 3:30 PM IST on trading days.</span>
+              </div>
+            )}
 
             {/* Error / Insufficient Funds Alert */}
             {orderType === 'BUY' && cashBalance < requiredMargin && (
@@ -965,7 +815,7 @@ export default function TradePage() {
               }}
             >
               <ShieldCheck size={13} color="var(--positive)" />
-              <span>Zero Brokerage • STT Exempt (Simulated) • Live Matching Engine</span>
+              <span>Paper trading · no brokerage or taxes deducted · fills at the live price</span>
             </div>
           </div>
 
