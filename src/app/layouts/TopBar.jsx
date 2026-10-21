@@ -1,6 +1,7 @@
 // ROADMAP: Section 3, 5 & Design Refinement — Institutional Terminal TopBar
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useAlerts } from '../hooks/useAlerts';
 import { useAuthStore } from '../stores/authStore';
 import { useThemeStore } from '../stores/themeStore';
 import { useMarketOverview } from '../hooks/useMarketData';
@@ -9,6 +10,9 @@ import SearchModal from '../components/navigation/SearchModal';
 import { Search, Bell, LogOut, ChevronDown, Sun, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 
+const readIds = (key) => { try { return JSON.parse(localStorage.getItem(key) || '[]'); } catch { return []; } };
+const writeIds = (key, ids) => { try { localStorage.setItem(key, JSON.stringify(ids.slice(-200))); } catch { /* storage unavailable */ } };
+
 export function TopBar() {
   const navigate = useNavigate();
   const { user, profile, logout } = useAuthStore();
@@ -16,6 +20,29 @@ export function TopBar() {
   const { data: overview } = useMarketOverview();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const location = useLocation();
+
+  // Triggered price alerts: a toast the first time each one is seen anywhere in the app, and the
+  // bell's dot until the alerts page has been opened since.
+  const { data: alerts = [] } = useAlerts();
+  const [seen, setSeen] = useState(() => readIds('mp_alerts_seen'));
+  const triggered = alerts.filter((a) => a.status === 'TRIGGERED');
+  const unseen = triggered.filter((a) => !seen.includes(a.id));
+  useEffect(() => {
+    const notified = readIds('mp_alerts_notified');
+    const fresh = triggered.filter((a) => !notified.includes(a.id));
+    for (const a of fresh) {
+      toast.info(`Price alert: ${a.symbol.replace(/^NSE:/, '')} ${a.condition === 'ABOVE' ? 'rose above' : 'fell below'} ₹${a.targetPrice.toLocaleString('en-IN')}`);
+    }
+    if (fresh.length) writeIds('mp_alerts_notified', [...notified, ...fresh.map((a) => a.id)]);
+  }, [triggered.map((a) => a.id).join()]);
+  useEffect(() => {
+    if (location.pathname === '/alerts' && unseen.length) {
+      const ids = [...seen, ...unseen.map((a) => a.id)];
+      writeIds('mp_alerts_seen', ids);
+      setSeen(ids);
+    }
+  }, [location.pathname, unseen.length]);
 
   // Detect OS for keyboard shortcut display
   const isMac = typeof navigator !== 'undefined' && navigator.platform?.includes('Mac');
@@ -32,10 +59,8 @@ export function TopBar() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  const displayName = profile?.displayName || profile?.full_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || (user?.email && user.email !== 'trader@marketpulse.in' ? user.email.split('@')[0] : 'Kartikay Gupta') || 'Kartikay Gupta';
-  const email = (user?.email && user.email !== 'trader@marketpulse.in' && user.email !== 'demo@marketpulse.in')
-    ? user.email
-    : (profile?.email && profile.email !== 'trader@marketpulse.in' ? profile.email : 'kartikay633@gmail.com');
+  const displayName = profile?.displayName || profile?.full_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Guest';
+  const email = user?.email || profile?.email || (profile?.isGuest ? 'Guest on this device' : '');
 
   const handleLogout = async () => {
     await logout();
@@ -90,7 +115,7 @@ export function TopBar() {
             onClick={() => navigate('/alerts')}
           >
             <Bell size={15} />
-            <span className="topbar-notification-dot" />
+            {unseen.length > 0 && <span className="topbar-notification-dot" aria-label={`${unseen.length} triggered alert${unseen.length > 1 ? 's' : ''}`} />}
           </button>
 
           {/* User Profile Menu */}

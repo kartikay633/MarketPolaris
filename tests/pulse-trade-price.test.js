@@ -45,3 +45,19 @@ test('paper orders fill at live prices and holdings are valued only at live pric
   assert.equal(portfolio.positions[0].currentPrice, 2060.1); // cost, not the invented 1250
   assert.equal(portfolio.positions[0].priceLive, false);
 });
+
+test("day P&L counts today's buys from their buy price and older shares from the previous close", async t => {
+  const repo = memoryRepository();
+  const orders = [];
+  repo.createOrder = async (_u, o) => { const rec = { id: orders.length + 1, ...o, createdAt: new Date().toISOString() }; orders.unshift(rec); return rec; };
+  repo.getOrders = async () => orders;
+  await repo.savePosition('u', { symbol: 'NSE:ABC', quantity: 10, avgPrice: 90 }); // held from earlier days
+  stubQuote(t, { ltp: 100, previousClose: 95, change: 5, source: 'live' });
+  const service = new TradeService(repo, open);
+  await service.executeOrder('u', { symbol: 'NSE:ABC', type: 'BUY', quantity: 5 }); // bought today at 100
+  marketDataService.getQuote = async symbol => ({ symbol, ltp: 102, previousClose: 95, change: 7, source: 'live' });
+  const p = await service.getPortfolio('u');
+  // 10 carried shares: +7 each; 5 bought today at 100: +2 each.
+  assert.equal(p.positions[0].dayPL, 80);
+  assert.equal(p.account.dayTotalPL, 80);
+});

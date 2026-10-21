@@ -11,7 +11,7 @@ export function useAlerts() {
       return res.data?.alerts || [];
     },
     staleTime: 10000,
-    refetchInterval: 15000,
+    refetchInterval: 30000, // shared by the top bar's alert bell on every page
   });
 }
 

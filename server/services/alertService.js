@@ -64,6 +64,19 @@ export class AlertService {
     return enrichedAlerts;
   }
 
+  // Background check (once a minute while the market is open): evaluating each user's alerts
+  // records any trigger even when no browser is open.
+  async checkAll() {
+    let checked = 0;
+    for (const userId of await this.repository.userIds()) {
+      const alerts = await this.repository.getAlerts(userId);
+      if (!alerts.some((a) => a.status === 'ACTIVE')) continue;
+      await this.getUserAlerts(userId);
+      checked += 1;
+    }
+    return checked;
+  }
+
   async createAlert(userId, { symbol, targetPrice, condition, note }) {
     const cleanSym = (symbol || '').trim().toUpperCase();
     const price = parseFloat(targetPrice);

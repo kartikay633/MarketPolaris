@@ -122,6 +122,16 @@ export class TradeService {
     let totalCurrentValue = 0;
     let dayTotalPL = 0;
 
+    // Shares bought today count from their buy price, shares carried overnight from the previous close.
+    const istDay = (t) => new Date(new Date(t).getTime() + 19800000).toISOString().slice(0, 10);
+    const today = istDay(Date.now());
+    const boughtToday = new Map(); // symbol -> { quantity, cost }
+    for (const o of (await this.repository.getOrders?.(userId, 500)) || []) {
+      if (o.type !== 'BUY' || !o.createdAt || istDay(o.createdAt) !== today) continue;
+      const b = boughtToday.get(o.symbol) || { quantity: 0, cost: 0 };
+      boughtToday.set(o.symbol, { quantity: b.quantity + o.quantity, cost: b.cost + o.quantity * o.price });
+    }
+
     // Enrich holdings with real-time Upstox quotes
     const enrichedPositions = await Promise.all(
       rawPositions.map(async (pos) => {
@@ -134,7 +144,13 @@ export class TradeService {
           const currentValue = Number((pos.quantity * currentPrice).toFixed(2));
           const unrealizedPL = Number((currentValue - investedValue).toFixed(2));
           const unrealizedPLPercent = investedValue > 0 ? Number(((unrealizedPL / investedValue) * 100).toFixed(2)) : 0;
-          const dayPL = Number((pos.quantity * (quote.change || 0)).toFixed(2));
+          const bought = boughtToday.get(pos.symbol);
+          const newShares = Math.min(pos.quantity, bought?.quantity || 0);
+          const carried = pos.quantity - newShares;
+          const previousClose = Number.isFinite(quote.previousClose) ? quote.previousClose : currentPrice - (quote.change || 0);
+          const dayPL = priceLive
+            ? Number((carried * (currentPrice - previousClose) + (newShares ? newShares * (currentPrice - bought.cost / bought.quantity) : 0)).toFixed(2))
+            : 0;
 
           totalInvested += investedValue;
           totalCurrentValue += currentValue;

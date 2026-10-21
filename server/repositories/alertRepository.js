@@ -7,6 +7,18 @@ import { persistentMap, persist } from './localStore.js';
 const memoryAlerts = persistentMap('alerts');
 
 export class AlertRepository {
+  // Users with alerts, for the background check (database rows and the local store).
+  async userIds() {
+    const ids = new Set(memoryAlerts.keys());
+    try {
+      const res = await query("SELECT DISTINCT user_id FROM price_alerts WHERE status = 'ACTIVE'");
+      for (const r of res.rows) ids.add(r.user_id);
+    } catch (err) {
+      logger.debug({ err: err.message }, 'DB query failed for alert users, using memory');
+    }
+    return [...ids];
+  }
+
   async getAlerts(userId) {
     try {
       const res = await query(
