@@ -41,7 +41,7 @@ export class MarketauxProvider extends NewsProvider {
 
       const res = await axios.get(`${this.baseUrl}/news/all`, {
         params,
-        timeout: 7000,
+        timeout: 12000,
       });
       return this._normalizeAll(res.data?.data, category).slice(0, limit);
     } catch (err) {
@@ -66,7 +66,7 @@ export class MarketauxProvider extends NewsProvider {
           filter_entities: 'true',
           limit: Math.min(limit, 10),
         },
-        timeout: 7000,
+        timeout: 12000,
       });
       return this._normalizeAll(res.data?.data, 'stocks', [symbol]).slice(0, limit);
     } catch (err) {

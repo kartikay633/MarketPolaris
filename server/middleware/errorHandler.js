@@ -38,10 +38,10 @@ export function errorHandler(err, req, res, _next) {
   // In production, don't leak stack traces for non-operational errors
   const isProd = process.env.NODE_ENV === 'production';
 
+  // The stack trace stays in the server log; responses never carry it.
   res.status(statusCode).json({
     error: isOperational || !isProd ? err.message : 'Internal server error',
     code: err.code || 'INTERNAL_ERROR',
     ...(err.details && { details: err.details }),
-    ...(!isProd && { stack: err.stack }),
   });
 }

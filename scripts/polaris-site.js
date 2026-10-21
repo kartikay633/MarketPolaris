@@ -17,9 +17,9 @@ const log = fs.createWriteStream(logFile, { flags: 'a' });
 const note = (msg) => log.write(`[${new Date().toISOString()}] ${msg}\n`);
 
 const services = [
-  { name: 'api', args: ['server/index.js'], env: { PORT: '3001' } },
+  { name: 'api', args: ['server/index.js'], env: { PORT: '3001', HOST: '127.0.0.1' } },
   // localhost only: vite.config.js sets host: true, which would also serve the site to the local network.
-  { name: 'web', args: ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], env: {} },
+  { name: 'web', args: ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', '5173', '--strictPort'], env: { API_PROXY_TARGET: 'http://127.0.0.1:3001' } },
 ];
 
 function start(svc) {

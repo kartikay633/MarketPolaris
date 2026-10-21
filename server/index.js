@@ -111,8 +111,10 @@ async function start() {
     logger.warn({ err }, 'Database not available — server starting without DB');
   }
 
-  app.listen(PORT, () => {
-    logger.info(`Market Polaris API server running on port ${PORT}`);
+  // HOST (e.g. 127.0.0.1) limits who can reach the API; unset, it listens on every interface as before.
+  const host = process.env.HOST || undefined;
+  app.listen(PORT, host, () => {
+    logger.info(`Market Polaris API server running on ${host || 'all interfaces'}, port ${PORT}`);
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Market status: ${getMarketStatus().status}`);
   });
