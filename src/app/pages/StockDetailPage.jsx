@@ -160,7 +160,7 @@ export default function StockDetailPage() {
               <span className="badge badge--accent">
                 {quote.exchange || 'NSE'}
               </span>
-              <MarketStatusBadge status={quote.marketStatus || 'CLOSED'} />
+              <MarketStatusBadge status={quote.marketStatus} />
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--text-muted)', fontSize: '13px' }}>

@@ -2,7 +2,8 @@
 // Institutional Terminal Styling — Exact Market Polaris Design System
 import React from 'react';
 
-export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compact = false }) {
+// With no status yet (still loading) the badge says so rather than guessing "closed".
+export function MarketStatusBadge({ status, reason, nextEvent, compact = false }) {
   const isLive = status === 'OPEN';
   const isPre = status === 'PRE_MARKET';
   const isPost = status === 'POST_MARKET';
@@ -30,7 +31,9 @@ export function MarketStatusBadge({ status = 'CLOSED', reason, nextEvent, compac
     ? 'PRE-OPEN'
     : isPost
     ? 'POST-MARKET'
-    : 'MARKET CLOSED';
+    : status
+    ? 'MARKET CLOSED'
+    : 'MARKET STATUS…';
 
   return (
     <div

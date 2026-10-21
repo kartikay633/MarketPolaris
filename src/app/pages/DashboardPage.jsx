@@ -159,7 +159,7 @@ export default function DashboardPage() {
                 <div className="fd-status fd-lbl">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', color: 'var(--text-primary)' }}>
                     <span className={`fd-live-dot${isOpen ? '' : ' fd-live-dot--closed'}`} />
-                    {isOpen ? 'NSE · BSE live' : (overview?.statusMessage || 'Market closed')}
+                    {!overview ? 'Loading market status…' : isOpen ? 'NSE · BSE live' : (overview.statusMessage || 'Market closed')}
                   </span>
                   <span className="fd-num">{istDate} · {istTime} IST</span>
                   <span>Welcome back, {displayName}</span>

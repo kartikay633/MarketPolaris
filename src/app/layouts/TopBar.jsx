@@ -68,7 +68,7 @@ export function TopBar() {
         <div className="topbar-controls">
           {/* Real-time Market Status */}
           <MarketStatusBadge
-            status={overview?.status || 'CLOSED'}
+            status={overview?.status}
             reason={overview?.statusMessage}
           />
 

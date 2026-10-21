@@ -28,6 +28,8 @@ export function useStockHistory(symbol, interval = '1D') {
     enabled: Boolean(symbol),
     staleTime: 30000,
     refetchOnWindowFocus: false,
+    // The one-day chart is today's session, so it keeps drawing new minutes (the server caches it for 60 s while open).
+    refetchInterval: interval === '1D' ? 60000 : false,
   });
 }
 

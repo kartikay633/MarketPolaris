@@ -96,7 +96,9 @@ export class MarketDataService {
     if (cached) return cached;
 
     const data = await this.provider.getHistoricalCandles(symbol, interval, fromDate, toDate);
-    cache.set(cacheKey, data, 300); // 5 minutes cache
+    // Today's intraday candles grow every minute while the market is open; everything else for 5 minutes.
+    const intradayToday = !toDate && (interval === '1D' || interval === '1minute');
+    cache.set(cacheKey, data, intradayToday ? this._getTTL(60, 300) : 300);
     return data;
   }
 
