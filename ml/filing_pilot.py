@@ -93,7 +93,7 @@ def sample(data_dir, name="pilot"):
     rows = [{"symbol": r.symbol, "seq": r.seq, "ts": r.ts.isoformat(), "category": r.category, "headline": r.text, "pdf": r.pdf}
             for r in s.itertuples()]
     out.parent.mkdir(parents=True, exist_ok=True)
-    atomic_json(out, {"drawnAt": utcnow(), "seed": SEED, "period": [p.date().isoformat() for p in PERIOD],
+    atomic_json(out, {"drawnAt": utcnow(), "set": name, "seed": spec["seed"], "period": [p.date().isoformat() for p in PERIOD],
                       "categories": {c: int((s.category == c).sum()) for c in cats}, "filings": rows})
     print(f"{len(rows)} filings across {len(cats)} categories -> {out}")
 
