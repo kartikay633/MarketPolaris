@@ -1,5 +1,94 @@
 # Pulse research results
 
+## Polaris AI v5 (shadow): the wide universe, improved — 22 October 2026 (shadow account started)
+
+Protocol: `ml/V5_SHADOW_PROTOCOL.md` (dffaa2d, committed before any experiment; first saved as
+`ml/V5_PROTOCOL.md`, see the note in the file). Code: `ml/v5.py` (`cache`, `diagnose`, `search`,
+`final`, `train`, `infer`). Every choice used the development rows of the wide study (October 2007 to
+November 2024), cached with the holdout removed. Scores count **tradable** rows: the top 90% of each date
+by 20-session traded value, matching the account's ₹10 crore rule (672 of 747 stocks today).
+
+**Why the wide risk model fell short (development folds, wide R-v4 ensemble).**
+
+| Rows | AUC |
+|---|---:|
+| Most liquid fifth of stocks | 0.716 |
+| Least liquid fifth | 0.664 |
+| Stocks with F&O implied volatility / without | 0.711 / 0.684 |
+| v4's 175 stocks / the added stocks | 0.704 / 0.685 |
+| By year, 2014 to 2024 | 0.629 (2017) to 0.739 (2020) |
+
+* Smaller and thinner stocks are noisier to forecast, and most added stocks have no options market,
+  so v4's strongest input is missing for them.
+* The study's 0.779 bar came from v4's holdout, which was an easier period: v4's core scores about
+  0.70 on these development years.
+* More data helps rather than hurts. On v4's stocks, training on all 706 stocks and twenty years scored
+  0.686, against 0.679 trained on the core alone and 0.682 on the last ten years.
+
+**Search: 43 variants, all logged** in `data/pulse-wide/reports/v5-search.jsonl` (24 risk, 19 ranking).
+
+* Shorter windows and recency weights were worse (10 years 0.676, 6 years 0.668, against 0.679 with
+  all twenty).
+* Single tree models of every kind (scikit-learn, XGBoost, regression or classification) scored about
+  0.679; CatBoost was lower, at 0.671 to 0.674.
+* Twenty-four inputs already in the panel but unused by v4 helped every model type. Examples are
+  recent returns, distance from the 52-week high and low, daily range, overnight gap, liquidity,
+  implied-volatility term structure and breadth. Logistic went from 0.682 to 0.688 and steadier
+  boosting from 0.679 to 0.686.
+* For ranking, regression on each stock's cross-sectional rank of 20-session excess return beat the
+  beat-the-median label (0.085 to 0.088–0.090). XGBoost's learning-to-rank objective (0.073) and a
+  sector-neutral target (0.077) were worse.
+
+**Chosen by the protocol's rule** (best mean; within 0.002 counts as tied; the simplest wins).
+
+| | Variant | Development folds (from 2014, 2017, 2019/20, 2022) | Mean | Method it replaces |
+|---|---|---|---:|---:|
+| Risk | `r-blend-plus`: logistic + steady boosting (600 trees, rate 0.03, 15 leaves, minimum leaf 3,000), 73 inputs | 0.662, 0.661, 0.720, 0.729 | **0.693** | 0.687 |
+| Ranking | `k-hgb-calm-reg`: boosting (500 trees, rate 0.02, 15 leaves, minimum leaf 5,000) on the rank target, v2's 34 inputs | 0.083, 0.131, 0.077, 0.065 | **0.089** | 0.085 |
+
+Each beats its old method in three of four folds. Three-model risk blends (0.693) and two-tree ranking
+blends (0.091) were within the tie margin, so the simpler models were kept.
+
+**Holdout, 4 December 2024 to 21 September 2026: a second look.** These rows were scored once before,
+in the wide study, so these numbers flatter.
+
+| | v5 | Wide-study method (rerun) |
+|---|---:|---:|
+| Risk AUC, tradable rows | **0.762** | 0.754 (0.752 as saved by the wide study) |
+| Risk accuracy | 69.4% | 68.8% |
+| Elevated / calm tier precision | 78.3% / 78.7% | 77.6% / 78.1% |
+| Ranking IC, 20 sessions (95% range) | 0.063 (0.017 to 0.108) | 0.066 (0.016 to 0.111) |
+| Top-20 portfolio, after 20 bps costs | **+13.3% a year** | +6.2% |
+| Excess over the equal-weight universe (+1.2%) | **+12.1%**; +0.9% to +19.5% across start days | +4.9%; −5.4% to +14.8% |
+| NIFTY 50 over the same period | −3.5% | |
+| Worst dip at rebalances | −19.0% | −16.1% |
+
+* **The ranking model counts as v5's.** Its IC is 0.003 below the old method, inside the 0.005
+  tolerance, so the protocol keeps v5's own model. Its portfolio is the clear difference.
+* **The shadow account starts.** The start rule (ranking IC lower bound above zero) passed. The rerun of
+  the old method matches the wide study's saved predictions on the same rows (IC 0.0661), which
+  checks the pipeline.
+
+**Limits, stated plainly.**
+
+* **The numbers flatter.** This is a second look at the holdout, chosen after 43 trials.
+* **Survivorship bias is strong here.** Today's Total Market list includes small caps that joined it by
+  rising, and that favours a ranking model.
+* **The risk model is still below v4 on v4's own large caps.** Its AUC of 0.762 compares with v4's
+  0.789 there; v5 versus v4 on shared stocks was not measured.
+* **The only clean test is forward.** v4 is unchanged and remains the live model.
+
+**Deployment.**
+
+* *Polaris AI v5 (shadow)* starts with ₹2,00,000 using the planner rules of the v4 account. It
+  chooses from the wide universe and buys only stocks trading at least ₹10 crore a day.
+* Each night after v4's job (`scripts/pulse-v5.js`), Upstox candles for the 762 instruments and NSE's
+  board-meeting list are updated. Prices Upstox re-adjusts after a split trigger a full re-download.
+* The models are refitted monthly on all labelled rows, forecasts go to a write-once ledger, and the
+  account then trades. The AI Portfolios page shows both accounts head to head over the same days.
+
+---
+
 ## Wide universe: 755 stocks, twenty years — 21 October 2026 (risk gates not passed; not used)
 
 Protocol: `ml/WIDE_PROTOCOL.md` with amendments 1, 1b and 1c, all committed before any model ran on
