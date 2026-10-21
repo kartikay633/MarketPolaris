@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { atomicJson } from '../server/research/marketData.js';
 
-// Nightly v5 shadow step (ml/V5_PROTOCOL.md), run by pulse-daily after v4's job: update the wide
+// Nightly v5 shadow step (ml/V5_SHADOW_PROTOCOL.md), run by pulse-daily after v4's job: update the wide
 // universe's candles and results calendar, refit monthly and forecast (python -m ml.v5 infer), then
 // let the v5 paper account fill, mark and decide. v4's account is already up to date by then and is
 // left alone. A failed step leaves v5 without fresh forecasts, so its account simply waits a day.

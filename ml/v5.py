@@ -1,4 +1,4 @@
-"""Polaris AI v5 (shadow): search on development folds, then production models (ml/V5_PROTOCOL.md).
+"""Polaris AI v5 (shadow): search on development folds, then production models (ml/V5_SHADOW_PROTOCOL.md).
 
 Run: python -m ml.v5 cache                    development rows only (holdout removed), every column
      python -m ml.v5 diagnose                 where the wide risk model loses accuracy (development folds)
@@ -511,7 +511,7 @@ def final():
     frames, meta, data_hash, events, cleaning = wide.load()
     if json.loads((CACHE / "v5-risk-dev.json").read_text(encoding="utf-8"))["dataHash"] != data_hash:
         raise SystemExit("The candles changed since the development search; the check needs the same data")
-    result = {"generatedAt": utcnow(), "protocol": "ml/V5_PROTOCOL.md", "dataHash": data_hash, "secondLook": True, "chosen": dict(CHOSEN)}
+    result = {"generatedAt": utcnow(), "protocol": "ml/V5_SHADOW_PROTOCOL.md", "dataHash": data_hash, "secondLook": True, "chosen": dict(CHOSEN)}
     saved = {}
     for kind in ("risk", "rank"):
         d = labelled(kind, frames, meta)
@@ -561,7 +561,7 @@ def final():
 def version(names):
     """Stable across monthly refits, so the forward ledger stays one continuous record."""
     import hashlib
-    return "pulse-v5-" + hashlib.sha256(json.dumps([names, "ml/V5_PROTOCOL.md"], sort_keys=True).encode()).hexdigest()[:16]
+    return "pulse-v5-" + hashlib.sha256(json.dumps([names, "ml/V5_SHADOW_PROTOCOL.md"], sort_keys=True).encode()).hexdigest()[:16]
 
 
 def train():
