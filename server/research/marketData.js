@@ -10,7 +10,14 @@ export async function atomicJson(file, value) {
   await fs.mkdir(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(value, null, 2));
-  await fs.rename(tmp, file);
+  // Windows briefly locks a file that is being read or scanned (EPERM/EBUSY/EACCES); retry before failing.
+  for (let attempt = 0; ; attempt += 1) {
+    try { await fs.rename(tmp, file); return; }
+    catch (error) {
+      if (!['EPERM', 'EBUSY', 'EACCES'].includes(error.code) || attempt >= 8) throw error;
+      await new Promise(resolve => setTimeout(resolve, 100 * 2 ** Math.min(attempt, 5)));
+    }
+  }
 }
 export async function readJson(file, fallback = null) {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
@@ -68,7 +75,8 @@ async function request(url, token, binary = false) {
     throw new Error(`Upstox HTTP ${response.status}${response.status === 401 ? ': renew server-side Upstox authentication' : ''}`);
   }
 }
-export async function collectMarketData({ dataDir = DATA_DIR, full = false, symbols = UNIVERSE, years = 10 } = {}) {
+// sectorOf and series let a separate universe (e.g. data/pulse-wide) reuse this collector; the defaults are v4's.
+export async function collectMarketData({ dataDir = DATA_DIR, full = false, symbols = UNIVERSE, years = 10, sectorOf = SECTOR_OF, series = ['EQ'] } = {}) {
   const token = process.env.UPSTOX_ANALYTICS_TOKEN || process.env.UPSTOX_ACCESS_TOKEN;
   if (!token) throw new Error('Configure server-side UPSTOX_ANALYTICS_TOKEN');
   if (!symbols.length || symbols.some(s => !/^[A-Z0-9&-]{1,24}$/.test(s))) throw new Error('Invalid universe');
@@ -76,10 +84,10 @@ export async function collectMarketData({ dataDir = DATA_DIR, full = false, symb
   const metadata = JSON.parse(gunzipSync(await request('https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz', null, true)));
   const unresolved = [];
   const instruments = symbols.flatMap(symbol => {
-    const instrument = metadata.find(x => x.segment === 'NSE_EQ' && x.instrument_type === 'EQ' && x.trading_symbol === symbol);
+    const instrument = metadata.find(x => x.segment === 'NSE_EQ' && series.includes(x.instrument_type) && x.trading_symbol === symbol);
     // Renamed or delisted symbols are reported rather than guessed from company names.
     if (!instrument) { unresolved.push(symbol); return []; }
-    return [{ symbol, instrumentKey: instrument.instrument_key, isin: instrument.isin, exchange: 'NSE', benchmark: false, sector: SECTOR_OF[symbol] || null }];
+    return [{ symbol, instrumentKey: instrument.instrument_key, isin: instrument.isin, exchange: 'NSE', benchmark: false, sector: sectorOf[symbol] || null }];
   });
   instruments.push(...BENCHMARKS.map(b => ({ ...b, exchange: 'NSE', benchmark: true, sector: b.sector || null })));
   const to = completedDate();
