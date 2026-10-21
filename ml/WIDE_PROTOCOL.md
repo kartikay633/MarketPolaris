@@ -100,3 +100,27 @@ was written while the extra decade of candles (item 1) was downloading; nothing 
    (R-v4, K-v2) are scored on the holdout in one run (`python -m ml.wide final`). The gates above
    apply to the selected candidates, unchanged; the unchanged-method scores are reported beside
    them. Gate 2 compares with v4's saved holdout predictions on shared stock-dates.
+1c. **Data integrity** (21 October 2026, about 22:30 IST, before any model is trained or scored on
+   `data/pulse-wide`). The only runs so far are code smoke tests on a 60-stock copy in a temporary
+   folder, with a dummy holdout of June 2016 to May 2018; no real holdout row was used, and their numbers
+   are not results and informed no choice. A check of the twenty-year candles found three provider
+   defects. The thresholds below come from that data check (gap counts, price grids), not from any model
+   score. Implementation: `clean()` in `ml/wide.py`.
+   * *No-trade sessions:* 4,094 rows (0.17%, mostly 2006 to 2014) have zero volume and a stale price.
+     They are dropped.
+   * *Coarse prices:* Upstox rounds split-adjusted history to ₹0.50 (₹1 for some), so a stock adjusted
+     down to ₹1 to ₹25 moves only in 2% to 50% steps (Bajaj Finance shows ₹1.50 to ₹2.50 in 2008). A row
+     is dropped when, over the past 60 traded sessions, the smallest close-to-close change exceeds 1% of
+     the price, or the price changed on fewer than 20 of them. Only past sessions are used. 41,004 rows
+     (1.7%).
+   * *The 2015 seam:* Upstox's history before 1 January 2015 misses some later bonus adjustments: on
+     that quiet day (NIFTY gap −0.1%) 20 stocks gapped more than 5%, against about 2 on the days either
+     side, and the jumps match bonuses (CONCOR +24% for 1:4, NTPC +9% for 1:10). A gap of more than 3%
+     on 1 January 2015 is a discontinuity, excluded like a demerger (20 stocks).
+   * *Kept:* listing and suspension gaps are already excluded by v4's eligibility rule (240 of the last
+     253 sessions traded). Six large gaps in established stocks have no NSE record (OFSS three times,
+     BPCL, LIC Housing Finance in 2008-09, Sterlite Technologies in 2010) and stay as genuine moves under
+     1b. With these rules 44 events are excluded in all.
+   * `python -m ml.wide final` refuses to run if the candles change between development and final.
+   * v4's own candles come from the same provider and probably carry the same rounding in older years.
+     v4 is not changed; this is noted for any future v5 study.

@@ -36,6 +36,8 @@ CORE = Path("data/pulse")
 HOLDOUT_START = pd.Timestamp("2024-12-04")
 FOLD_POINTS = (.4, .55, .7, .85)
 GAP, EVENT_DAYS = .25, 3
+SEAM, SEAM_GAP = pd.Timestamp("2015-01-01"), .03   # amendment 1c: where Upstox's older history begins
+GRID, GRID_WINDOW = .01, 60                         # amendment 1c: coarsest usable price step, share of price
 TIE = .002
 SEED = rank.SEED
 
@@ -65,6 +67,34 @@ def log(msg):
 
 # ------------------------------------------------------------------ data
 
+def clean(frames, meta):
+    """Amendment 1c. A session with no trade, or whose price sits on a grid coarser than 1% of the
+    price (Upstox rounds split-adjusted history to ₹0.50), has no usable price and is dropped. The
+    coarseness is judged from the past 60 traded sessions only, never from later prices: the
+    smallest price change there, or fewer than 20 sessions with any change at all. A stock
+    gapping more than 3% on 1 January 2015, where the older history begins, gets a discontinuity
+    event: that history misses some later bonus adjustments, so it is on a different price scale."""
+    out, seam, zero_rows, coarse_rows = {}, [], 0, 0
+    for s, f in frames.items():
+        if meta[s].get("benchmark"):
+            out[s] = f
+            continue
+        traded = f.loc[f.volume > 0]
+        step = traded.close.diff().abs().where(lambda x: x > 1e-9)
+        moves = step.notna().astype(float).rolling(GRID_WINDOW, min_periods=GRID_WINDOW).sum()
+        # A price that moved on fewer than 20 of the last 60 traded sessions is stuck on its grid too.
+        coarse = (step.rolling(GRID_WINDOW, min_periods=20).min() / traded.close > GRID) | (moves < 20)
+        zero_rows += len(f) - len(traded)
+        coarse_rows += int(coarse.sum())
+        g = traded.loc[~coarse]
+        out[s] = g
+        if SEAM in g.index and g.index[0] < SEAM:
+            i = g.index.get_loc(SEAM)
+            if abs(g.open.iloc[i] / g.close.iloc[i - 1] - 1) > SEAM_GAP:
+                seam.append((s, SEAM.date().isoformat()))
+    return out, seam, {"zeroVolumeRowsDropped": zero_rows, "coarsePriceRowsDropped": coarse_rows, "seamEvents": len(seam)}
+
+
 def corporate_events(frames, meta, root=ROOT):
     """Overnight gaps above 25% within three days of an NSE demerger/scheme/capital-reduction record."""
     records = json.loads((root / "corporate-actions.json").read_text(encoding="utf-8"))["events"]
@@ -86,10 +116,12 @@ def corporate_events(frames, meta, root=ROOT):
 
 def load(root=ROOT):
     frames, meta, quality, data_hash = load_candles(root)
-    events = corporate_events(frames, meta, root)
+    frames, seam, cleaning = clean(frames, meta)
+    events = sorted(set(corporate_events(frames, meta, root)) | set(seam))
     rank.CORPORATE_EVENTS = events  # read by ml.rank.build_panel at call time; v4's own runs are unaffected
-    log(f"{sum(not m.get('benchmark') for m in meta.values())} stocks, {len(events)} corporate events excluded")
-    return frames, meta, data_hash, events
+    cleaning["eventsExcluded"] = len(events)
+    log(f"{sum(not m.get('benchmark') for m in meta.values())} stocks; cleaning {cleaning}")
+    return frames, meta, data_hash, events, cleaning
 
 
 def shrink(d):
@@ -219,7 +251,7 @@ def choose(results, families):
 # ------------------------------------------------------------------ commands
 
 def dev(kind):
-    frames, meta, data_hash, events = load()
+    frames, meta, data_hash, events, cleaning = load()
     d = risk_data(frames, meta) if kind == "risk" else rank_data(frames, meta)
     del frames
     dv, _, starts = split(d)
@@ -236,7 +268,8 @@ def dev(kind):
         log(f"{family:<7} {model:<15} mean {'AUC' if kind == 'risk' else 'IC '} {r['mean']:.4f}  ({r['minutes']} min)")
         atomic_json(ROOT / "reports" / f"wide-dev-{kind}.json", {"generatedAt": utcnow(), "kind": kind, "dataHash": data_hash, "complete": False, "results": results})
     pick = choose(results, families)
-    report = {"generatedAt": utcnow(), "kind": kind, "dataHash": data_hash, "complete": True, "protocol": "ml/WIDE_PROTOCOL.md amendment 1",
+    report = {"generatedAt": utcnow(), "kind": kind, "dataHash": data_hash, "complete": True, "protocol": "ml/WIDE_PROTOCOL.md amendments 1, 1b, 1c",
+              "cleaning": cleaning,
               "holdoutStart": HOLDOUT_START.date().isoformat(), "development": {"start": dv.date.min().date().isoformat(), "end": dv.date.max().date().isoformat(),
               "rows": int(len(dv)), "stocks": int(dv.symbol.nunique())}, "foldStarts": [pd.Timestamp(s).date().isoformat() for s in starts],
               "corporateEvents": len(events), "results": results, "selected": {"family": pick["family"], "model": pick["model"], "mean": pick["mean"]},
@@ -292,8 +325,11 @@ def final():
         raise SystemExit("Both development runs must finish before the final evaluation")
     if (ROOT / "reports" / "wide-final.json").exists():
         raise SystemExit("The final evaluation has already run; the holdout is scored once")
-    frames, meta, data_hash, events = load()
-    result = {"generatedAt": utcnow(), "protocol": "ml/WIDE_PROTOCOL.md amendment 1", "dataHash": data_hash, "holdoutStart": HOLDOUT_START.date().isoformat()}
+    frames, meta, data_hash, events, cleaning = load()
+    if any(r["dataHash"] != data_hash for r in reports.values()):
+        raise SystemExit("The candles changed since the development runs; the final evaluation needs the same data")
+    result = {"generatedAt": utcnow(), "protocol": "ml/WIDE_PROTOCOL.md amendments 1, 1b, 1c", "dataHash": data_hash, "cleaning": cleaning,
+              "holdoutStart": HOLDOUT_START.date().isoformat()}
     d = risk_data(frames, meta)
     picks = {"selected": reports["risk"]["selected"], "unchangedMethod": reports["risk"]["unchangedMethod"]}
     riskres = score_final("risk", d, picks, RISK_FAMILIES)
