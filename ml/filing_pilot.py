@@ -38,8 +38,21 @@ MATERIAL = ["Press Release", "Outcome of Board Meeting", "Financial Result Updat
             "Pendency of Litigation(s)/dispute(s) or the outcome impacting the Company", "Investor Presentation"]
 
 
+LETTER_STYLE = ["Press Release", "Outcome of Board Meeting", "Change in Management", "Credit Rating", "News Verification",
+                "Action(s) taken or orders passed", "Action(s) initiated or orders passed", "Resignation", "Cessation",
+                "Monthly Business Updates", "Change in Auditors",
+                "Pendency of Litigation(s)/dispute(s) or the outcome impacting the Company", "Acquisition"]
+# Sample sets: stage 1 ("pilot") and stage 1b ("pilot1b", ml/FILING_READER_PROTOCOL.md).
+SETS = {"pilot": {"seed": SEED, "size": SIZE, "categories": MATERIAL, "per": None, "exclude": []},
+        "pilot1b": {"seed": 20261021, "size": 70, "categories": LETTER_STYLE, "per": 6, "exclude": ["pilot"]}}
+
+
 def filing_dir():
     return Path(os.environ.get("PULSE_FILING_DIR", "D:/MarketPulseML/filings"))
+
+
+def set_dir(name="pilot"):
+    return filing_dir() / name
 
 
 def attachments(root):
@@ -54,25 +67,29 @@ def attachments(root):
     return links
 
 
-def sample(data_dir):
+def sample(data_dir, name="pilot"):
     root = Path(data_dir)
-    out = filing_dir() / "pilot" / "sample.json"
+    spec = SETS[name]
+    out = set_dir(name) / "sample.json"
     if out.exists():
-        raise SystemExit(f"{out} exists; the pilot sample is drawn once and never redrawn")
+        raise SystemExit(f"{out} exists; a sample is drawn once and never redrawn")
     d = load_disclosures(root)
-    d = d.loc[(d.ts >= PERIOD[0]) & (d.ts < PERIOD[1]) & d.category.isin(MATERIAL)].copy()
+    d = d.loc[(d.ts >= PERIOD[0]) & (d.ts < PERIOD[1]) & d.category.isin(spec["categories"])].copy()
     links = attachments(root)
     d["pdf"] = [links.get((s, q)) for s, q in zip(d.symbol, d.seq)]
     d = d.dropna(subset=["pdf"])
-    rng = np.random.default_rng(SEED)
+    seen = {(f["symbol"], f["seq"]) for other in spec["exclude"]
+            for f in json.loads((set_dir(other) / "sample.json").read_text(encoding="utf-8"))["filings"]}
+    d = d.loc[[(s, q) not in seen for s, q in zip(d.symbol, d.seq)]]
+    rng = np.random.default_rng(spec["seed"])
     cats = sorted(d.category.unique())
-    per = int(np.ceil(SIZE / len(cats)))
+    per = spec["per"] or int(np.ceil(spec["size"] / len(cats)))
     picks = []
     for cat in cats:
         g = d.loc[d.category == cat]
         picks.append(g.iloc[rng.permutation(len(g))[:per]])
     s = pd.concat(picks)
-    s = s.iloc[rng.permutation(len(s))[:SIZE]].sort_values("ts")
+    s = s.iloc[rng.permutation(len(s))[:spec["size"]]].sort_values("ts")
     rows = [{"symbol": r.symbol, "seq": r.seq, "ts": r.ts.isoformat(), "category": r.category, "headline": r.text, "pdf": r.pdf}
             for r in s.itertuples()]
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -81,8 +98,8 @@ def sample(data_dir):
     print(f"{len(rows)} filings across {len(cats)} categories -> {out}")
 
 
-def fetch(data_dir):
-    base = filing_dir() / "pilot"
+def fetch(data_dir, name="pilot"):
+    base = set_dir(name)
     meta = json.loads((base / "sample.json").read_text(encoding="utf-8"))
     status = []
     for f in meta["filings"]:
@@ -106,10 +123,10 @@ def fetch(data_dir):
     print(f"fetched {sum(s['ok'] for s in status)}, failed {sum(not s['ok'] for s in status)}")
 
 
-def text(data_dir):
+def text(data_dir, name="pilot"):
     from pypdf import PdfReader
 
-    base = filing_dir() / "pilot"
+    base = set_dir(name)
     meta = json.loads((base / "sample.json").read_text(encoding="utf-8"))
     summary = []
     for f in meta["filings"]:
@@ -138,8 +155,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("command", choices=["sample", "fetch", "text"])
     parser.add_argument("--data-dir", default="data/pulse")
+    parser.add_argument("--set", default="pilot", choices=sorted(SETS), help="sample set (stage 1: pilot, stage 1b: pilot1b)")
     args = parser.parse_args()
-    {"sample": sample, "fetch": fetch, "text": text}[args.command](args.data_dir)
+    {"sample": sample, "fetch": fetch, "text": text}[args.command](args.data_dir, args.set)
 
 
 if __name__ == "__main__":

@@ -19,13 +19,13 @@ import argparse
 import json
 import re
 
-from ml.filing_pilot import filing_dir
+from ml.filing_pilot import filing_dir, set_dir
 
 CONTEXT = 260
 
 
-def records(model):
-    base = filing_dir() / "pilot"
+def records(model, name="pilot"):
+    base = set_dir(name)
     out = []
     for path in sorted((base / "extract" / model).glob("*.json")):
         r = json.loads(path.read_text(encoding="utf-8"))
@@ -46,8 +46,8 @@ def context(text, quote):
     return flat[max(0, i - CONTEXT):i + len(key) + CONTEXT]
 
 
-def sheet(model, start, count):
-    recs = records(model)
+def sheet(model, start, count, name="pilot"):
+    recs = records(model, name)
     for r in recs[start:start + count]:
         res = r["result"]
         print(f"\n##### {r['id']} | {r['category']} | {res.get('event_type')} | materiality={res.get('materiality')} | headline-misses={res.get('headline_missing_material_info')}")
@@ -59,9 +59,9 @@ def sheet(model, start, count):
     print(f"\n(records {start}-{min(start + count, len(recs)) - 1} of {len(recs)})")
 
 
-def score(model):
-    recs = {r["id"]: r for r in records(model)}
-    grades = json.loads((filing_dir() / "pilot" / f"grades-{model}.json").read_text(encoding="utf-8"))
+def score(model, name="pilot"):
+    recs = {r["id"]: r for r in records(model, name)}
+    grades = json.loads((set_dir(name) / f"grades-{model}.json").read_text(encoding="utf-8"))
     total = correct = numeric = numeric_ok = 0
     by_kind, missing = {}, 0
     for rid, r in recs.items():
@@ -84,7 +84,7 @@ def score(model):
                 numeric_ok += ok
     fact_rate = correct / total if total else 0
     num_rate = numeric_ok / numeric if numeric else 0
-    out = {"model": model, "graded": total, "ungraded": missing, "verdicts": by_kind,
+    out = {"set": name, "model": model, "graded": total, "ungraded": missing, "verdicts": by_kind,
            "factAccuracy": round(fact_rate, 4), "numericFacts": numeric, "numericAccuracy": round(num_rate, 4),
            "passesGate": bool(fact_rate >= .90 and num_rate >= .95 and missing == 0)}
     print(json.dumps(out, indent=1))
@@ -97,8 +97,9 @@ def main():
     p.add_argument("--model", default="qwen3_4b")
     p.add_argument("--start", type=int, default=0)
     p.add_argument("--count", type=int, default=15)
+    p.add_argument("--set", default="pilot", help="sample set (pilot, pilot1b)")
     a = p.parse_args()
-    sheet(a.model, a.start, a.count) if a.command == "sheet" else score(a.model)
+    sheet(a.model, a.start, a.count, a.set) if a.command == "sheet" else score(a.model, a.set)
 
 
 if __name__ == "__main__":

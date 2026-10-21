@@ -21,7 +21,7 @@ import time
 import urllib.request
 from pathlib import Path
 
-from ml.filing_pilot import filing_dir
+from ml.filing_pilot import filing_dir, set_dir
 from ml.pulse import atomic_json, utcnow
 
 OLLAMA = "http://localhost:11434/api/chat"
@@ -155,9 +155,9 @@ def stay_awake():
         pass
 
 
-def run(model, limit=None):
+def run(model, limit=None, name="pilot"):
     stay_awake()
-    base = filing_dir() / "pilot"
+    base = set_dir(name)
     sample = json.loads((base / "sample.json").read_text(encoding="utf-8"))["filings"]
     out_dir = base / "extract" / model.replace(":", "_")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -194,8 +194,8 @@ def run(model, limit=None):
             break
 
 
-def summary():
-    base = filing_dir() / "pilot" / "extract"
+def summary(name="pilot"):
+    base = set_dir(name) / "extract"
     out = {}
     for d in sorted(p for p in base.iterdir() if p.is_dir()):
         recs = [json.loads(p.read_text(encoding="utf-8")) for p in d.glob("*.json")]
@@ -218,8 +218,9 @@ def main():
     parser.add_argument("command", choices=["run", "summary"])
     parser.add_argument("--model", default="qwen3:4b")
     parser.add_argument("--limit", type=int)
+    parser.add_argument("--set", default="pilot", help="sample set (pilot, pilot1b)")
     args = parser.parse_args()
-    run(args.model, args.limit) if args.command == "run" else summary()
+    run(args.model, args.limit, args.set) if args.command == "run" else summary(args.set)
 
 
 if __name__ == "__main__":
