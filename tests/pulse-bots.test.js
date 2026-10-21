@@ -73,4 +73,19 @@ test('a losing exit gets a post-mortem and the v5 bot starts only with v5 foreca
   const summaries = await botSummaries(dir);
   assert.equal(summaries.length, 2);
   assert.ok(summaries.every(s => s.status === 'running' && Number.isFinite(s.returnPct)));
+  assert.ok(summaries.every(s => s.pricing.source === 'close'));
+
+  // Live prices value holdings only once their session is newer than the last evening close.
+  const held = summaries[0].positions.map(p => p.symbol);
+  assert.ok(held.length > 0);
+  const up = new Map(held.map(symbol => [symbol, summaries[0].positions.find(p => p.symbol === symbol).price + 2]));
+  const [liveV4] = await botSummaries(dir, { asOf: '2099-01-01T05:00:00.000Z', session: '2099-01-01', prices: up, nifty: null });
+  assert.equal(liveV4.pricing.source, 'live');
+  liveV4.positions.forEach(p => assert.ok(Math.abs(p.unrealized - p.quantity * (up.get(p.symbol) - p.avgPrice)) < 0.01));
+  const gain = summaries[0].positions.reduce((sum, p) => sum + p.quantity * 2, 0);
+  assert.ok(Math.abs(liveV4.value - (summaries[0].value + gain)) < 1);
+  const [sameDay] = await botSummaries(dir, { asOf: '', session: summaries[0].asOf, prices: up, nifty: null });
+  assert.equal(sameDay.pricing.source, 'close');
+  const after = JSON.parse(await readFile(path.join(dir, 'bots', 'pulse-v4.json'), 'utf8'));
+  assert.equal(after.equity.length, v4.equity.length, 'live valuation never writes to the account');
 });

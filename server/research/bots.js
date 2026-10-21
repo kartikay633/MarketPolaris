@@ -168,28 +168,34 @@ export async function runBots(dataDir = DATA_DIR) {
   return { asOf, bots: out };
 }
 
-// Read-only summary for the AI Portfolios page.
-export async function botSummaries(dataDir = DATA_DIR) {
+// Read-only summary for the AI Portfolios page. With `live` ({ asOf, session, open, prices: Map of
+// symbol -> last price, nifty }), holdings are valued at live prices once the live session is newer
+// than the last evening close. Display only: the account file and its equity history are untouched.
+export async function botSummaries(dataDir = DATA_DIR, live = null) {
   const prices = new Prices(dataDir);
   const result = [];
   for (const bot of BOTS) {
     const s = await readJson(path.join(dataDir, 'bots', `${bot.id}.json`));
     if (!s) { result.push({ id: bot.id, label: bot.label, description: bot.description, status: 'not started' }); continue; }
     const last = s.equity.at(-1), first = s.equity[0];
-    const value = last?.value ?? s.startCash;
+    const bookDate = last?.date || s.startAsOf;
+    const useLive = Boolean(live?.session > bookDate && Object.keys(s.positions).every(symbol => live.prices.has(symbol)));
     const positions = [];
     for (const [symbol, p] of Object.entries(s.positions)) {
-      const price = (await prices.closeAtOrBefore(symbol, last?.date || s.startAsOf)) ?? p.avgPrice;
-      positions.push({ symbol, quantity: p.quantity, avgPrice: p.avgPrice, price, value: round(p.quantity * price), weight: value ? p.quantity * price / value : 0,
+      const price = useLive ? live.prices.get(symbol) : (await prices.closeAtOrBefore(symbol, bookDate)) ?? p.avgPrice;
+      positions.push({ symbol, quantity: p.quantity, avgPrice: p.avgPrice, price, value: round(p.quantity * price),
         unrealized: round(p.quantity * (price - p.avgPrice)), openedOn: p.openedOn });
     }
+    const value = useLive ? round(s.cash + positions.reduce((sum, p) => sum + p.quantity * p.price, 0)) : last?.value ?? s.startCash;
+    for (const p of positions) p.weight = value ? p.quantity * p.price / value : 0;
     positions.sort((a, b) => b.value - a.value);
     let peak = -Infinity, maxDrawdown = 0;
-    for (const e of s.equity) { peak = Math.max(peak, e.value); maxDrawdown = Math.min(maxDrawdown, e.value / peak - 1); }
+    for (const e of [...s.equity, ...(useLive ? [{ value }] : [])]) { peak = Math.max(peak, e.value); maxDrawdown = Math.min(maxDrawdown, e.value / peak - 1); }
     const closed = s.trades.filter(t => t.side === 'SELL' && t.status === 'filled');
-    const niftyStart = first?.nifty, niftyNow = last?.nifty;
+    const niftyStart = first?.nifty, niftyNow = useLive && live.nifty ? live.nifty : last?.nifty;
     // Display names come from the code, so a rename reaches accounts that started earlier.
-    result.push({ id: s.id, label: bot.label, description: bot.description, status: 'running', startAsOf: s.startAsOf, asOf: last?.date || s.startAsOf,
+    result.push({ id: s.id, label: bot.label, description: bot.description, status: 'running', startAsOf: s.startAsOf, asOf: bookDate,
+      pricing: useLive ? { source: 'live', asOf: live.asOf, open: Boolean(live.open) } : { source: 'close', asOf: bookDate },
       startCash: s.startCash, value, cash: s.cash, returnPct: value / s.startCash - 1,
       niftyReturnPct: niftyStart && niftyNow ? niftyNow / niftyStart - 1 : null, maxDrawdown,
       largestPositionWeight: positions[0]?.weight || 0, positions, pending: s.pending, equity: s.equity,

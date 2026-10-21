@@ -8,6 +8,9 @@ import CompanyLogo from '../common/CompanyLogo';
 const inr = (v, d = 0) => Number.isFinite(v) ? `₹${v.toLocaleString('en-IN', { maximumFractionDigits: d, minimumFractionDigits: d })}` : '—';
 const pct = (v, d = 2) => Number.isFinite(v) ? `${v > 0 ? '+' : ''}${(v * 100).toFixed(d)}%` : '—';
 const date = v => v ? new Date(v).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' }) : '—';
+const time = v => new Date(v).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+const priced = bot => bot.pricing?.source !== 'live' ? `values as of ${date(bot.asOf)} close`
+  : bot.pricing.open ? `live prices, updated ${time(bot.pricing.asOf)} IST` : "values at today's close";
 function Metric({ label, value, detail }) { return <div className="pr-metric"><span>{label}</span><strong>{value}</strong>{detail && <small>{detail}</small>}</div>; }
 
 // Account value and NIFTY 50, both rebased to the bot's start.
@@ -27,7 +30,7 @@ function BotCard({ bot }) {
     <div className="pr-empty"><Bot size={24} /><h3>Not started yet</h3><p>It starts with ₹2,00,000 on the first evening its model publishes forecasts.</p></div></section>;
   const vsNifty = Number.isFinite(bot.niftyReturnPct) ? bot.returnPct - bot.niftyReturnPct : null;
   return <section className="pr-panel">
-    <header className="pr-panel-heading"><div><h2>{bot.label}</h2><p>{bot.description} · trading since {date(bot.startAsOf)} · values as of {date(bot.asOf)} close</p></div></header>
+    <header className="pr-panel-heading"><div><h2>{bot.label}</h2><p>{bot.description} · trading since {date(bot.startAsOf)} · {priced(bot)}</p></div></header>
     <div className="pr-metrics pr-panel-body">
       <Metric label="Account value" value={inr(bot.value)} detail={`Started with ${inr(bot.startCash)}; no money added`} />
       <Metric label="Return" value={pct(bot.returnPct)} detail={vsNifty === null ? 'NIFTY comparison after the first day' : `${pct(vsNifty)} versus NIFTY 50 (${pct(bot.niftyReturnPct)})`} />
@@ -37,7 +40,7 @@ function BotCard({ bot }) {
     <Growth equity={bot.equity} />
     {bot.pending.length > 0 && <div className="pr-panel-body"><h3 className="pr-small">Orders for the next market open</h3>
       <ul className="pr-limitations">{bot.pending.map((o, i) => <li key={i}><strong>{o.side === 'BUY' ? 'Buy' : 'Sell'} {o.quantity} {o.symbol}</strong> — {o.reason}</li>)}</ul></div>}
-    {bot.positions.length > 0 && <div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Holding</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value</th><th>Weight</th><th>Profit / loss</th><th>Since</th></tr></thead>
+    {bot.positions.length > 0 && <div className="pr-table-scroll"><table className="pr-table"><thead><tr><th>Holding</th><th>Shares</th><th>Avg cost</th><th>Price</th><th>Value</th><th>Weight</th><th>Profit / loss</th><th>Bought on</th></tr></thead>
       <tbody>{bot.positions.map(p => <tr key={p.symbol}><th scope="row"><Link className="pr-stock-button" to={`/stocks/${encodeURIComponent(`NSE:${p.symbol}`)}`}><CompanyLogo symbol={p.symbol} size={22} />{p.symbol}</Link></th>
         <td>{p.quantity}</td><td>{inr(p.avgPrice, 2)}</td><td>{inr(p.price, 2)}</td><td>{inr(p.value)}</td><td>{pct(p.weight, 1).replace('+', '')}</td>
         <td className={p.unrealized >= 0 ? 'text-positive' : 'text-negative'}>{inr(p.unrealized)}</td><td>{date(p.openedOn)}</td></tr>)}</tbody></table></div>}
@@ -53,7 +56,9 @@ function BotCard({ bot }) {
 }
 
 export default function AiPortfolios() {
-  const bots = useQuery({ queryKey: ['pulse-bots'], queryFn: async () => (await api.get('/research/bots')).data.bots, staleTime: 60000, refetchInterval: 300000 });
+  // Every 30 s while the market is open (the server's quote snapshot refreshes about every 15 s), else every 5 min.
+  const bots = useQuery({ queryKey: ['pulse-bots'], queryFn: async () => (await api.get('/research/bots')).data.bots, staleTime: 15000,
+    refetchInterval: q => q.state.data?.some(b => b.pricing?.open) ? 30000 : 300000 });
   return <div className="pr-content">
     <div className="pr-note">Polaris AI trades these paper accounts on its own. Each started with ₹2,00,000 and can never add money. Decisions are made after the evening data update and filled at the next market open, with brokerage and taxes deducted. Paper trading only; not investment advice.</div>
     {bots.isPending && <div className="pr-loading" role="status">Loading AI portfolios…</div>}
