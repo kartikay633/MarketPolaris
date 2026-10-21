@@ -6,18 +6,20 @@ import NewsFeed from '../components/news/NewsFeed';
 import { Globe, TrendingUp } from 'lucide-react';
 import ErrorBoundary from '../components/common/ErrorBoundary';
 
-const TRENDING_TOPICS = [
-  { tag: 'RBI Monetary Policy', category: 'economy' },
-  { tag: 'NIFTY 50 Record', category: 'markets' },
-  { tag: 'IT Earnings Disclosures', category: 'stocks' },
-  { tag: 'Green Energy Capex', category: 'stocks' },
-  { tag: 'Auto Monthly Volumes', category: 'economy' },
-  { tag: 'Banking FII Flows', category: 'markets' },
-];
+// Tone of the articles on screen, from each article's own sentiment score (Marketaux entity
+// sentiment). Shown only when there are enough scored articles to say anything.
+function newsTone(articles) {
+  const scored = articles.filter((a) => ['positive', 'negative', 'neutral'].includes(a.sentiment));
+  if (scored.length < 3) return null;
+  const share = (s) => Math.round((scored.filter((a) => a.sentiment === s).length / scored.length) * 100);
+  const positive = share('positive'), negative = share('negative');
+  return { count: scored.length, positive, negative, neutral: 100 - positive - negative };
+}
 
 export default function NewsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { data: articles = [], isLoading, refetch } = useMarketNews(selectedCategory, 30);
+  const tone = newsTone(articles);
 
   return (
     <ErrorBoundary>
@@ -57,54 +59,34 @@ export default function NewsPage() {
             />
           </div>
 
-          {/* Right Column: Trending Topics & Sentiment Summary */}
+          {/* Right Column: tone of the articles shown */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            {/* Trending Topics Card */}
-            <div className="card card-padded">
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '12px', letterSpacing: '-0.01em' }}>
-                Macro & Sector Themes
-              </div>
-
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {TRENDING_TOPICS.map((topic) => (
-                  <button
-                    key={topic.tag}
-                    onClick={() => setSelectedCategory(topic.category)}
-                    className="chip"
-                    style={{ cursor: 'pointer', fontSize: '11.5px', padding: '5px 10px' }}
-                  >
-                    #{topic.tag}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Indian Market Sentiment Meter */}
             <div className="card card-padded">
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
-                <TrendingUp size={15} color="var(--positive)" />
+                <TrendingUp size={15} color="var(--accent)" />
                 <h3 style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', margin: 0 }}>
-                  Newswire Tone
+                  Tone of these articles
                 </h3>
               </div>
-
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px', fontSize: '12px' }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Indian Index Disclosures:</span>
-                <span className="text-positive" style={{ fontWeight: 600 }}>Moderately Positive</span>
-              </div>
-
-              {/* Progress track */}
-              <div className="progress-bar-track" style={{ height: '6px', marginBottom: '8px' }}>
-                <div style={{ width: '58%', backgroundColor: 'var(--positive)', borderRadius: '4px 0 0 4px' }} />
-                <div style={{ width: '22%', backgroundColor: 'var(--text-muted)' }} />
-                <div style={{ width: '20%', backgroundColor: 'var(--negative)', borderRadius: '0 4px 4px 0' }} />
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
-                <span className="text-positive" style={{ fontWeight: 500 }}>58% Bullish</span>
-                <span>22% Neutral</span>
-                <span className="text-negative" style={{ fontWeight: 500 }}>20% Bearish</span>
-              </div>
+              {tone ? (
+                <>
+                  <div className="progress-bar-track" style={{ height: '6px', marginBottom: '8px' }}>
+                    <div style={{ width: `${tone.positive}%`, backgroundColor: 'var(--positive)' }} />
+                    <div style={{ width: `${tone.neutral}%`, backgroundColor: 'var(--text-muted)' }} />
+                    <div style={{ width: `${tone.negative}%`, backgroundColor: 'var(--negative)' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: 'var(--text-muted)' }}>
+                    <span className="text-positive" style={{ fontWeight: 500 }}>{tone.positive}% positive</span>
+                    <span>{tone.neutral}% neutral</span>
+                    <span className="text-negative" style={{ fontWeight: 500 }}>{tone.negative}% negative</span>
+                  </div>
+                  <p style={{ fontSize: '11px', color: 'var(--text-muted)', margin: '8px 0 0' }}>
+                    From the sentiment Marketaux scores for the {tone.count} articles listed.
+                  </p>
+                </>
+              ) : (
+                <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: 0 }}>Not enough scored articles to show a tone.</p>
+              )}
             </div>
           </div>
         </div>

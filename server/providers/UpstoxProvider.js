@@ -13,6 +13,7 @@ import {
 } from './marketSnapshot.js';
 import { getMarketStatus, isMarketOpen } from '../utils/marketHours.js';
 import logger from '../utils/logger.js';
+import { NotFoundError, ProviderError } from '../utils/errors.js';
 
 export { SOURCE_EOD, SOURCE_UNAVAILABLE };
 const NSE_INSTRUMENTS_URL = 'https://assets.upstox.com/market-quote/instruments/exchange/NSE.json.gz';
@@ -61,12 +62,11 @@ const RAW_MAPPINGS = {
 
 // Every index, quote and overview payload carries `source`, set by the code path
 // that produced it: 'live' for an Upstox response, 'end-of-day' for saved candles or an
-// exchange end-of-day report, 'fallback' for built-in values (single quotes and the
-// standalone indices endpoint only; the overview, movers and screener never serve them).
+// exchange end-of-day report. There are no built-in prices; 'fallback' remains as the marker
+// consumers reject, so a stubbed or future fallback can never pass for a real price.
 export const SOURCE_LIVE = 'live';
 export const SOURCE_FALLBACK = 'fallback';
 
-const markFallback = (rows) => rows.map((row) => ({ ...row, source: SOURCE_FALLBACK }));
 const positive = (v) => (Number(v) > 0 ? Number(v) : null);
 
 // Saved candle files are named by the research collection; the dashboard knows NIFTY BANK as BANK_NIFTY.
@@ -341,53 +341,9 @@ export class UpstoxProvider extends MarketDataProvider {
     return list.length > 0 ? list : this._getFallbackIndices();
   }
 
-  _getFallbackIndices() {
-    return markFallback([
-      {
-        symbol: 'NIFTY_50',
-        name: 'NIFTY 50',
-        value: 25418.55,
-        change: 138.25,
-        changePercent: 0.55,
-        open: 25320.10,
-        high: 25445.80,
-        low: 25290.40,
-        previousClose: 25280.30,
-      },
-      {
-        symbol: 'SENSEX',
-        name: 'BSE SENSEX',
-        value: 83184.80,
-        change: 412.10,
-        changePercent: 0.50,
-        open: 82950.00,
-        high: 83260.40,
-        low: 82880.20,
-        previousClose: 82772.70,
-      },
-      {
-        symbol: 'BANK_NIFTY',
-        name: 'NIFTY BANK',
-        value: 52140.90,
-        change: 320.65,
-        changePercent: 0.62,
-        open: 51920.00,
-        high: 52210.00,
-        low: 51850.50,
-        previousClose: 51820.25,
-      },
-      {
-        symbol: 'INDIA_VIX',
-        name: 'INDIA VIX',
-        value: 12.85,
-        change: -0.42,
-        changePercent: -3.16,
-        open: 13.20,
-        high: 13.45,
-        low: 12.60,
-        previousClose: 13.27,
-      },
-    ]);
+  // No live index quotes: the indices of the shared snapshot (live, else saved end-of-day candles).
+  async _getFallbackIndices() {
+    return (await this.getSnapshot())?.indices || [];
   }
 
   // Movers are ranked over the covered universe from the shared snapshot. With no snapshot
@@ -452,7 +408,7 @@ export class UpstoxProvider extends MarketDataProvider {
 
             return {
               symbol: upper,
-              name: q.symbol || cleanSym,
+              name: this._names(this._universe())[cleanSym] || cleanSym,
               exchange: upper.startsWith('BSE') ? 'BSE' : 'NSE',
               instrumentKey: instKey,
               ltp,
@@ -481,117 +437,39 @@ export class UpstoxProvider extends MarketDataProvider {
       }
     }
 
-    const cleanSym = upper.replace('NSE:', '').replace('BSE:', '');
-    const quoteMap = {
-      RELIANCE: {
-        symbol: 'NSE:RELIANCE',
-        name: 'Reliance Industries Limited',
-        exchange: 'NSE',
-        instrumentKey: 'NSE_EQ|INE002A01018',
-        ltp: 2980.50,
-        change: 65.10,
-        changePercent: 2.23,
-        open: 2930.00,
-        high: 2995.00,
-        low: 2922.00,
-        close: 2915.40,
-        previousClose: 2915.40,
-        volume: 14200000,
-        averageVolume: 9800000,
-        fiftyTwoWeekHigh: 3217.90,
-        fiftyTwoWeekLow: 2220.30,
-        sector: 'Energy',
-        industry: 'Oil & Gas Refining',
-      },
-      TCS: {
-        symbol: 'NSE:TCS',
-        name: 'Tata Consultancy Services',
-        exchange: 'NSE',
-        instrumentKey: 'NSE_EQ|INE467B01029',
-        ltp: 4290.00,
-        change: 62.00,
-        changePercent: 1.47,
-        open: 4240.00,
-        high: 4310.00,
-        low: 4235.00,
-        close: 4228.00,
-        previousClose: 4228.00,
-        volume: 6800000,
-        averageVolume: 5100000,
-        fiftyTwoWeekHigh: 4585.00,
-        fiftyTwoWeekLow: 3313.00,
-        sector: 'Information Technology',
-        industry: 'Software Consulting',
-      },
-      HDFCBANK: {
-        symbol: 'NSE:HDFCBANK',
-        name: 'HDFC Bank Limited',
-        exchange: 'NSE',
-        instrumentKey: 'NSE_EQ|INE040A01034',
-        ltp: 1675.00,
-        change: 28.50,
-        changePercent: 1.73,
-        open: 1650.00,
-        high: 1682.00,
-        low: 1648.00,
-        close: 1646.50,
-        previousClose: 1646.50,
-        volume: 29400000,
-        averageVolume: 22100000,
-        fiftyTwoWeekHigh: 1794.00,
-        fiftyTwoWeekLow: 1363.55,
-        sector: 'Banking',
-        industry: 'Private Bank',
-      },
-      INFY: {
-        symbol: 'NSE:INFY',
-        name: 'Infosys Limited',
-        exchange: 'NSE',
-        instrumentKey: 'NSE_EQ|INE009A01021',
-        ltp: 1942.20,
-        change: 52.80,
-        changePercent: 2.80,
-        open: 1900.00,
-        high: 1955.00,
-        low: 1895.00,
-        close: 1889.40,
-        previousClose: 1889.40,
-        volume: 18200000,
-        averageVolume: 12400000,
-        fiftyTwoWeekHigh: 1990.00,
-        fiftyTwoWeekLow: 1358.35,
-        sector: 'Information Technology',
-        industry: 'Software Services',
-      },
-    };
-
-    const quote = quoteMap[cleanSym] || {
-      symbol: `NSE:${cleanSym}`,
-      name: `${cleanSym} Limited`,
-      exchange: 'NSE',
-      instrumentKey: `NSE_EQ|${cleanSym}`,
-      ltp: 1250.00,
-      change: 15.50,
-      changePercent: 1.25,
-      open: 1238.00,
-      high: 1262.00,
-      low: 1235.00,
-      close: 1234.50,
-      previousClose: 1234.50,
-      volume: 8500000,
-      averageVolume: 6200000,
-      fiftyTwoWeekHigh: 1450.00,
-      fiftyTwoWeekLow: 980.00,
-      sector: 'Diversified',
-      industry: 'Conglomerate',
-    };
-
-    const marketState = getMarketStatus();
+    // No live quote: the last saved session close, labelled end-of-day. A symbol with neither an
+    // instrument key nor saved candles is not covered; there are no built-in prices.
+    const cleanSym = upper.replace(/^(NSE|BSE):/, '');
+    const saved = /^[A-Z0-9&_-]+$/.test(cleanSym) ? await readCandleSummary(this.dataDir, SAVED_CANDLE_FILES[cleanSym] || cleanSym) : null;
+    if (!saved) {
+      if (!instKey) throw new NotFoundError(`${cleanSym} is not one of the NSE stocks Market Polaris covers`);
+      throw new ProviderError('Upstox', `the price of ${cleanSym} is unavailable right now`);
+    }
+    const change = saved.close - saved.previousClose;
+    const sectorCode = this._universe().stocks.find((i) => i.symbol === cleanSym)?.sector || saved.sector || null;
     return {
-      ...quote,
-      marketStatus: marketState.status,
+      symbol: upper,
+      name: this._names(this._universe())[cleanSym] || cleanSym,
+      exchange: upper.startsWith('BSE') ? 'BSE' : 'NSE',
+      instrumentKey: instKey || null,
+      ltp: saved.close,
+      change: Number(change.toFixed(2)),
+      changePercent: saved.previousClose ? Number(((change / saved.previousClose) * 100).toFixed(2)) : 0,
+      open: saved.open,
+      high: saved.high,
+      low: saved.low,
+      close: saved.previousClose,
+      previousClose: saved.previousClose,
+      volume: saved.volume,
+      averageVolume: null,
+      fiftyTwoWeekHigh: saved.fiftyTwoWeekHigh,
+      fiftyTwoWeekLow: saved.fiftyTwoWeekLow,
+      sector: sectorCode ? SECTOR_LABELS[sectorCode] || sectorCode : null,
+      industry: null,
+      marketStatus: getMarketStatus().status,
       lastUpdated: new Date().toISOString(),
-      source: SOURCE_FALLBACK,
+      asOf: saved.date,
+      source: SOURCE_EOD,
     };
   }
 

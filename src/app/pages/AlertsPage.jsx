@@ -16,13 +16,6 @@ import ErrorBoundary from '../components/common/ErrorBoundary';
 import { TableSkeleton } from '../components/common/LoadingSkeleton';
 import CompanyLogo from '../components/common/CompanyLogo';
 
-const QUICK_ALERT_SUGGESTIONS = [
-  { symbol: 'NSE:RELIANCE', defaultTarget: 3050, condition: 'ABOVE' },
-  { symbol: 'NSE:TCS', defaultTarget: 2000, condition: 'BELOW' },
-  { symbol: 'NSE:HDFCBANK', defaultTarget: 750, condition: 'ABOVE' },
-  { symbol: 'NSE:INFY', defaultTarget: 1100, condition: 'ABOVE' },
-];
-
 export default function AlertsPage() {
   const navigate = useNavigate();
   const { data: alerts = [], isLoading } = useAlerts();
@@ -59,13 +52,6 @@ export default function AlertsPage() {
     );
   };
 
-  const handleQuickAdd = (item) => {
-    setSymbol(item.symbol);
-    setTargetPrice(item.defaultTarget.toString());
-    setCondition(item.condition);
-    setShowCreateModal(true);
-  };
-
   return (
     <ErrorBoundary>
       <div className="page-container-wide alerts-page">
@@ -85,22 +71,6 @@ export default function AlertsPage() {
             <Plus size={14} />
             <span>Create Alert</span>
           </button>
-        </div>
-
-        {/* Quick Suggestion Pills */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase' }}>
-            Quick Triggers:
-          </span>
-          {QUICK_ALERT_SUGGESTIONS.map((item) => (
-            <button
-              key={item.symbol}
-              className="chip"
-              onClick={() => handleQuickAdd(item)}
-            >
-              {item.symbol.replace('NSE:', '')} {item.condition === 'ABOVE' ? '≥' : '≤'} ₹{item.defaultTarget}
-            </button>
-          ))}
         </div>
 
         {/* Filter Tabs */}

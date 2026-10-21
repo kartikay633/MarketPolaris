@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import axios from 'axios';
-import { UpstoxProvider, SOURCE_LIVE, SOURCE_FALLBACK } from '../server/providers/UpstoxProvider.js';
+import { UpstoxProvider, SOURCE_LIVE } from '../server/providers/UpstoxProvider.js';
+import { SOURCE_EOD } from '../server/providers/marketSnapshot.js';
 import { MarketDataService } from '../server/services/marketDataService.js';
 
 const INDEX_KEYS = ['NSE_INDEX|Nifty 50', 'BSE_INDEX|SENSEX', 'NSE_INDEX|Nifty Bank', 'NSE_INDEX|India VIX'];
@@ -12,12 +16,27 @@ function liveIndexPayload() {
   }]));
 }
 
-function provider({ live }) {
+// A provider reading an isolated data folder, so the developer's saved candles never leak in.
+async function provider(t, { live, candles = {} }) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'polaris-quote-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await mkdir(path.join(dir, 'candles'), { recursive: true });
+  for (const [symbol, rows] of Object.entries(candles)) {
+    await writeFile(path.join(dir, 'candles', `${symbol}.json`), JSON.stringify({ candles: rows }));
+  }
   const p = new UpstoxProvider();
   p.isLive = live;
   p.token = live ? 'test-token' : undefined;
+  p.dataDir = dir;
+  p.universe = { stocks: [], sectorIndices: [], headline: [] };
+  p.names = {};
   return p;
 }
+
+const RELIANCE_CANDLES = [
+  ['2026-10-16T00:00:00+05:30', 1190, 1205, 1185, 1200, 1000],
+  ['2026-10-19T00:00:00+05:30', 1201, 1215, 1198, 1210.5, 2000],
+];
 
 // The provider calls axios.get directly; swap it per test so nothing reaches the network.
 function stubAxios(t, impl) {
@@ -26,19 +45,23 @@ function stubAxios(t, impl) {
   t.after(() => { axios.get = original; });
 }
 
-// The overview, movers and screener never serve built-in values; tests/market-snapshot.test.js
-// covers them. This file covers the standalone index and single-quote paths.
-test('without an Upstox token every index and quote is marked fallback', async t => {
+test('without a live quote a stock shows its last saved close, labelled end-of-day', async t => {
   stubAxios(t, async () => { throw new Error('network must not be called without a token'); });
-  const p = provider({ live: false });
+  const p = await provider(t, { live: false, candles: { RELIANCE: RELIANCE_CANDLES } });
+  const quote = await p.getQuote('NSE:RELIANCE');
+  assert.equal(quote.source, SOURCE_EOD);
+  assert.equal(quote.ltp, 1210.5);
+  assert.equal(quote.previousClose, 1200);
+  assert.equal(quote.asOf, '2026-10-19');
+});
 
-  const indices = await p.getIndices();
-  assert.ok(indices.length > 0);
-  for (const idx of indices) assert.equal(idx.source, SOURCE_FALLBACK);
-
-  for (const sym of ['RELIANCE', 'NSE:TCS', 'UNKNOWNCO']) {
-    assert.equal((await p.getQuote(sym)).source, SOURCE_FALLBACK, sym);
-  }
+test('an unknown symbol is not found and an uncollected one is unavailable, never a built-in price', async t => {
+  stubAxios(t, async () => { throw new Error('ETIMEDOUT'); });
+  const p = await provider(t, { live: true });
+  await assert.rejects(p.getQuote('NOTASTOCK'), err => err.statusCode === 404);
+  await assert.rejects(p.getQuote('../../secrets'), err => err.statusCode === 404);
+  await assert.rejects(p.getQuote('RELIANCE'), err => err.statusCode === 503); // known instrument, no saved candles
+  assert.deepEqual(await p.getIndices(), []);
 });
 
 test('a successful Upstox response is marked live', async t => {
@@ -46,7 +69,8 @@ test('a successful Upstox response is marked live', async t => {
     if (params.instrument_key.includes(',')) return { data: { data: liveIndexPayload() } };
     return { data: { data: { [params.instrument_key]: { symbol: 'RELIANCE', last_price: 1411.2, net_change: 12.3, volume: 5, ohlc: { open: 1400, high: 1415, low: 1398, close: 1398.9 } } } } };
   });
-  const p = provider({ live: true });
+  const p = await provider(t, { live: true });
+  p.names = { RELIANCE: 'RELIANCE INDUSTRIES LTD' };
 
   const indices = await p.getIndices();
   assert.deepEqual(indices.map(i => i.symbol), ['NIFTY_50', 'SENSEX', 'BANK_NIFTY', 'INDIA_VIX']);
@@ -55,28 +79,25 @@ test('a successful Upstox response is marked live', async t => {
   const quote = await p.getQuote('RELIANCE');
   assert.equal(quote.source, SOURCE_LIVE);
   assert.equal(quote.ltp, 1411.2);
+  assert.equal(quote.name, 'RELIANCE INDUSTRIES LTD');
 });
 
-test('a failed or empty Upstox response falls back and says so', async t => {
+test('a failed or empty Upstox response falls back to the saved close and says so', async t => {
   let mode = 'throw';
   stubAxios(t, async () => {
     if (mode === 'throw') throw new Error('ETIMEDOUT');
     return { data: { data: {} } };
   });
-  const p = provider({ live: true });
-
+  const p = await provider(t, { live: true, candles: { RELIANCE: RELIANCE_CANDLES } });
   for (mode of ['throw', 'empty']) {
-    const indices = await p.getIndices();
-    for (const idx of indices) assert.equal(idx.source, SOURCE_FALLBACK, mode);
     const quote = await p.getQuote('RELIANCE');
-    assert.equal(quote.source, SOURCE_FALLBACK, mode);
-    assert.equal(quote.ltp, 2980.5, 'built-in value is still served, only labelled');
+    assert.equal(quote.source, SOURCE_EOD, mode);
+    assert.equal(quote.ltp, 1210.5, mode);
   }
 });
 
 test('the service keeps the source marker', async t => {
   stubAxios(t, async () => { throw new Error('unused'); });
-  const service = new MarketDataService(provider({ live: false }));
-  assert.equal((await service.getQuote('INFY')).source, SOURCE_FALLBACK);
-  for (const idx of await service.getIndices()) assert.equal(idx.source, SOURCE_FALLBACK);
+  const service = new MarketDataService(await provider(t, { live: false, candles: { INFY: RELIANCE_CANDLES } }));
+  assert.equal((await service.getQuote('INFY')).source, SOURCE_EOD);
 });

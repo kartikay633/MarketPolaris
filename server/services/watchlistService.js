@@ -29,14 +29,15 @@ export class WatchlistService {
             sector: quote.sector,
           };
         } catch (err) {
+          // No price available: the row shows dashes, never a ₹0 price.
           return {
             symbol,
             name: symbol.replace('NSE:', '').replace('BSE:', ''),
             exchange: 'NSE',
-            ltp: 0,
-            change: 0,
-            changePercent: 0,
-            volume: 0,
+            ltp: null,
+            change: null,
+            changePercent: null,
+            volume: null,
           };
         }
       })

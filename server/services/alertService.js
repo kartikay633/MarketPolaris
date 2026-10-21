@@ -16,7 +16,9 @@ export class AlertService {
       rawAlerts.map(async (alert) => {
         try {
           const quote = await marketDataService.getQuote(alert.symbol);
-          const currentPrice = quote.ltp || alert.targetPrice;
+          // Without a real price the alert is neither checked nor triggered.
+          if (!(quote.ltp > 0) || quote.source === 'fallback') throw new Error(`No price for ${alert.symbol}`);
+          const currentPrice = quote.ltp;
           const target = alert.targetPrice;
 
           // Calculate percentage distance to target
@@ -49,10 +51,10 @@ export class AlertService {
           return {
             ...alert,
             name: alert.symbol,
-            currentPrice: alert.targetPrice,
-            change: 0,
-            changePercent: 0,
-            distancePercent: 0,
+            currentPrice: null,
+            change: null,
+            changePercent: null,
+            distancePercent: null,
             isTriggered: alert.status === 'TRIGGERED',
           };
         }
@@ -75,6 +77,12 @@ export class AlertService {
     }
     if (cond !== 'ABOVE' && cond !== 'BELOW') {
       throw new Error('Trigger condition must be either ABOVE or BELOW');
+    }
+    // Only stocks the app can price: an unknown symbol would never be checked.
+    try {
+      await marketDataService.getQuote(cleanSym);
+    } catch (err) {
+      if (err.statusCode === 404) throw new Error(`${cleanSym.replace(/^(NSE|BSE):/, '')} is not one of the NSE stocks Market Polaris covers`);
     }
 
     const created = await this.repository.createAlert(userId, {

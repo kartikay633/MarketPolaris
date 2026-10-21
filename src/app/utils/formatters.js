@@ -5,7 +5,7 @@
  * e.g. 1000000 -> ₹10,00,000.00
  */
 export function formatINR(val, options = {}) {
-  if (val === null || val === undefined || isNaN(val)) return '₹0.00';
+  if (val === null || val === undefined || val === '' || isNaN(val)) return '—'; // a missing value is never shown as zero
   const num = Number(val);
   const { decimals = 2, compact = false } = options;
 
@@ -33,7 +33,8 @@ export function formatINR(val, options = {}) {
  * Format volume in Indian Lakhs/Crores or K/M
  */
 export function formatVolume(val) {
-  if (!val || isNaN(val)) return '0';
+  if (val === 0) return '0';
+  if (val === null || val === undefined || val === '' || isNaN(val)) return '—'; // a missing value is never shown as zero
   const num = Number(val);
   if (num >= 10000000) {
     return `${(num / 10000000).toFixed(2)} Cr`;
@@ -52,7 +53,7 @@ export function formatVolume(val) {
  * e.g. 1.25 -> +1.25%
  */
 export function formatPercent(val, decimals = 2) {
-  if (val === null || val === undefined || isNaN(val)) return '0.00%';
+  if (val === null || val === undefined || val === '' || isNaN(val)) return '—'; // a missing value is never shown as zero
   const num = Number(val);
   const sign = num > 0 ? '+' : '';
   return `${sign}${num.toFixed(decimals)}%`;
@@ -62,7 +63,7 @@ export function formatPercent(val, decimals = 2) {
  * Format plain number with Indian comma separators
  */
 export function formatNumber(val, decimals = 2) {
-  if (val === null || val === undefined || isNaN(val)) return '0';
+  if (val === null || val === undefined || val === '' || isNaN(val)) return '—'; // a missing value is never shown as zero
   return new Intl.NumberFormat('en-IN', {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
