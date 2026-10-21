@@ -65,6 +65,15 @@ was written while the extra decade of candles (item 1) was downloading; nothing 
    candles are dropped (and `ml.pulse.load_candles` validates again) instead of rejecting a whole
    stock, which restores Mazagon Dock, South Indian Bank, Vodafone Idea and Yes Bank.
    Implementation: `scripts/pulse-wide-history.js`.
+1b. **Demergers and schemes** (added the same evening, still before any model run). Upstox adjusts
+   splits and bonuses but not demergers, so a demerger looks like a crash. v4 excludes five such
+   events found by scanning for overnight gaps above 25% and checking each one. For 755 stocks over
+   twenty years the check is automated against NSE's corporate-actions record: an event is a date
+   on which the stock gapped more than 25% overnight **and** NSE lists a demerger, scheme of
+   arrangement or capital reduction for it within three days. Events are excluded exactly as in v4
+   (label windows containing them, features in the following 252 sessions). Large gaps with no
+   such NSE record stay in the data as genuine moves. Implementation: `scripts/pulse-wide-events.js`
+   and `ml/wide.py`.
 2. **Holdout fixed by date:** every row dated on or after **4 December 2024**, the start of v4's
    risk holdout, so all comparisons use the same unseen period. Development is every earlier row
    whose label ends before that date; four expanding, purged walk-forward folds start at 40%, 55%,
