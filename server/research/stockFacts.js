@@ -11,6 +11,9 @@ export function priceHistoryFacts(candles) {
   const last = rows.at(-1);
   const back = (sessions) => (rows.length > sessions ? rows[rows.length - 1 - sessions].close : null);
   const ret = (sessions) => { const p = back(sessions); return p ? round(last.close / p - 1) : null; };
+  // A calendar year of candles holds about 246 sessions, so the 1-year return runs from the first candle.
+  const spanDays = (last.time - rows[0].time) / 86400;
+  const yearReturn = ret(249) ?? (spanDays >= 350 ? round(last.close / rows[0].close - 1) : null);
   const year = rows.slice(-250);
   const high = Math.max(...year.map((c) => c.high)), low = Math.min(...year.map((c) => c.low));
   const logReturns = rows.slice(-61).map((c, i, a) => (i ? Math.log(c.close / a[i - 1].close) : null)).filter((v) => v !== null);
@@ -24,7 +27,7 @@ export function priceHistoryFacts(candles) {
     return1Month: ret(21),
     return3Months: ret(63),
     return6Months: ret(126),
-    return1Year: ret(249),
+    return1Year: yearReturn,
     high52Week: high,
     low52Week: low,
     belowHigh52Week: round(last.close / high - 1),
@@ -32,6 +35,8 @@ export function priceHistoryFacts(candles) {
     volatility60DayAnnualised: round(vol),
     averageDailyTradedValueCrore20Day: round(tradedValueCr, 2),
     sessions: rows.length,
+    // The windows behind these figures, so an answer may name them ("52-week", "60-day").
+    periods: '1 month, 3 months, 6 months, 1 year, 52-week range, 60-day volatility, 20-session traded value',
   };
 }
 

@@ -162,3 +162,10 @@ test('a stock outside the models gets price, filing and news facts, and is marke
   assert.equal(result.evidence.find(e => e.type === 'coverage').data.modelForecasts, 'not available');
   assert.match(result.reply, /no ranking or volatility forecast/);
 });
+
+test('a rupee figure from the evidence is allowed; an invented one is still rejected', () => {
+  const ids = new Set(['history-X']);
+  const allowed = allowedNumbers({ high52Week: 61.5, low52Week: 36.31, periods: '1 month, 52-week range' });
+  assert.equal(validateInterpretation({ paragraphs: [{ text: 'Its 52-week range is â‚¹36.31 to â‚¹61.50.', evidenceIds: ['history-X'] }] }, ids, allowed).length, 1);
+  assert.throws(() => validateInterpretation({ paragraphs: [{ text: 'A fair value is â‚¹75.', evidenceIds: ['history-X'] }] }, ids, allowed));
+});

@@ -163,7 +163,8 @@ export function validateInterpretation(value, allowedIds, allowed=[0,1,2,3]) {
   for(const paragraph of output.paragraphs) {
     // Disclaimers such as "does not guarantee" are allowed; affirmative promises are not.
     const affirmative=paragraph.text.replace(/\b(?:not|no|never|cannot|can't|doesn't|does not|do not|without)\s+(?:a\s+)?guarante\w*/gi,'');
-    if (/₹|\$|guarante|risk[- ]free|sure[- ]shot/i.test(affirmative)) throw new Error('Interpretation contains unsupported claims');
+    // Rupee amounts are allowed only as figures that appear in the evidence (checked just below).
+    if (/\$|guarante|risk[- ]free|sure[- ]shot/i.test(affirmative)) throw new Error('Interpretation contains unsupported claims');
     if (!numbersSupported(paragraph.text, allowed)) throw new Error('Interpretation contains a number absent from the evidence');
     if(paragraph.evidenceIds.some(id=>!allowedIds.has(id))) throw new Error('Unsupported evidence reference');
   }
