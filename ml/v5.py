@@ -303,6 +303,13 @@ def risk_variants():
         "r-xgb-plus-reg": {**base, "model": "xgb", "features": RISK_PLUS, "target": "logratio", "params": dict(max_depth=5, min_child_weight=1000)},
         "r-cat-plus-reg": {**base, "model": "cat", "features": RISK_PLUS, "target": "logratio"},
     })
+    # Round 3: blends of a linear and tree models (the round-1 blend beat every single model).
+    v.update({
+        "r-blend-plus": {**base, "model": "blend", "parts": [v["r-logit-plus"], v["r-hgb-plus"]]},
+        "r-blend-plus-reg": {**base, "model": "blend", "parts": [v["r-logit-plus"], v["r-hgb-plus-reg"]]},
+        "r-blend3-plus": {**base, "model": "blend", "parts": [v["r-logit-plus"], v["r-hgb-plus"], v["r-xgb-plus-reg"]]},
+        "r-blend3": {**base, "model": "blend", "parts": [v["r-logit"], v["r-hgb-calm"], v["r-xgb-reg"]]},
+    })
     return v
 
 
@@ -330,10 +337,46 @@ def rank_variants():
         "k-logit-plus-reg": {**base, "model": "logit", "target": "rank", "features": RANK_PLUS},
         "k-hgb-calm-riskadj": {**base, "model": "hgb", "params": calm, "target": "rank_riskadj"},
     })
+    v.update({
+        "k-blend-trees": {**base, "model": "blend", "parts": [v["k-xgb-reg"], v["k-hgb-plus-reg"], v["k-cat-reg"]]},
+        "k-blend-two": {**base, "model": "blend", "parts": [v["k-xgb-reg"], v["k-hgb-plus-reg"]]},
+        "k-blend-linear": {**base, "model": "blend", "parts": [v["k-xgb-reg"], v["k-logit-plus-reg"]]},
+    })
     return v
 
 
 VARIANTS = {"risk": risk_variants, "rank": rank_variants}
+
+
+def capacity(spec):
+    """Rough model size, the last tie-breaker: trees times leaves; a linear model counts as one."""
+    p = spec.get("params", {})
+    if spec["model"] == "blend":
+        return sum(capacity(part) for part in spec["parts"])
+    if spec["model"] == "logit":
+        return 1
+    if spec["model"] == "hgb":
+        return p.get("max_iter", 300) * p.get("max_leaf_nodes", 31)
+    if spec["model"] in ("xgb", "xgbrank"):
+        return p.get("n_estimators", 600) * 2 ** p.get("max_depth", 6)
+    return p.get("iterations", 800) * 2 ** p.get("depth", 6)
+
+
+def choose(kind):
+    """The protocol's rule over every variant in the trial ledger: best mean development score; within
+    0.002 of it counts as tied, and the simplest tied variant wins (fewer inputs, single model, size)."""
+    registry = VARIANTS[kind]()
+    latest = {}
+    for line in LEDGER.read_text(encoding="utf-8").splitlines():
+        r = json.loads(line)
+        if r["kind"] == kind and r["name"] in registry:
+            latest[r["name"]] = r
+    best = max(r["mean"] for r in latest.values())
+    tied = [n for n, r in latest.items() if r["mean"] >= best - wide.TIE]
+    key = lambda n: (len(inputs(registry[n])), registry[n]["model"] == "blend", capacity(registry[n]))
+    pick = min(tied, key=key)
+    return {"kind": kind, "trials": len(latest), "best": max(latest, key=lambda n: latest[n]["mean"]), "bestMean": best,
+            "tied": sorted(tied, key=key), "chosen": pick, "chosenMean": latest[pick]["mean"], "folds": latest[pick]["folds"]}
 
 
 def search(kind, names):
@@ -385,7 +428,7 @@ def diagnose():
 
 # ------------------------------------------------------------------ final check (once) and production
 
-CHOSEN = {"risk": None, "rank": None}              # set from the development search, committed before `final`
+CHOSEN = {"risk": "r-blend-plus", "rank": "k-hgb-calm-reg"}  # choose() on 43 development trials, 22 Oct 2026, before `final`
 BASELINE = {"risk": "r-ensemble", "rank": "k-hgb"}  # the wide R-v4 ensemble and K-v2 gbm already scored on the holdout
 BASELINE_FILES = {"risk": "wide-holdout-risk.csv", "rank": "wide-holdout-rank.csv"}
 TOLERANCE = .005

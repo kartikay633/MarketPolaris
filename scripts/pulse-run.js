@@ -22,7 +22,7 @@ try {
   lock=await open(lockFile,'wx');
   await lock.writeFile(JSON.stringify({pid:process.pid,startedAt:new Date().toISOString(),mode}));
   await access(python);
-  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','ml.test_disclosure','ml.test_option_features','ml.test_global_features','ml.test_v5_features','-v']);
+  if(mode==='test') await execute(python,['-m','unittest','ml.test_pulse','ml.test_rank','ml.test_risk','ml.test_disclosure','ml.test_option_features','ml.test_global_features','ml.test_v5_features','ml.test_v5','-v']);
   else if(mode==='forward') {
     await execute(python,['-m','ml.rank','score-forward','--data-dir',DATA_DIR]);
     await execute(python,['-m','ml.risk','score-forward','--data-dir',DATA_DIR]);
