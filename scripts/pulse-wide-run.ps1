@@ -8,7 +8,19 @@ $py = Join-Path $root '.venv-pulse\Scripts\python.exe'
 $log = Join-Path $root 'data\pulse-wide\run.log'
 (Get-Process -Id $PID).PriorityClass = 'BelowNormal'
 
+# v4's nightly job (22:00, Mon-Fri) has priority: training waits for it rather than competing for memory.
+function WaitForNightlyJob {
+  while ($true) {
+    $t = (Get-Date).TimeOfDay
+    $window = $t -ge [TimeSpan]'21:50' -and $t -le [TimeSpan]'22:40'
+    $running = Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'pulse-daily' }
+    if (-not $window -and -not $running) { return }
+    Start-Sleep -Seconds 60
+  }
+}
+
 function Step($name, [string[]]$arguments) {
+  if ($name -like '*train*' -or $name -eq 'gates') { WaitForNightlyJob }
   Add-Content $log "[$(Get-Date -Format s)] > $name"
   & $py @arguments *>> $log
   if ($LASTEXITCODE -ne 0) { Add-Content $log "[$(Get-Date -Format s)] < $name failed ($LASTEXITCODE)"; exit $LASTEXITCODE }
