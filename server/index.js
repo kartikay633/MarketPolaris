@@ -11,7 +11,7 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { testConnection } from './config/database.js';
 import { RATE_LIMITS } from './config/constants.js';
-import { getMarketStatus } from './utils/marketHours.js';
+import { getMarketStatus, isMarketOpen, startCalendarRefresh } from './utils/marketHours.js';
 import logger from './utils/logger.js';
 
 const app = express();
@@ -110,6 +110,19 @@ async function start() {
   } catch (err) {
     logger.warn({ err }, 'Database not available — server starting without DB');
   }
+
+  // The official NSE holiday and special-session calendar refreshes every 12 hours.
+  startCalendarRefresh({ logger });
+
+  // Price alerts are checked every minute while the market is open, with or without a browser open.
+  const { alertService } = await import('./services/alertService.js');
+  setInterval(() => {
+    if (isMarketOpen()) alertService.checkAll().catch((err) => logger.warn({ err: err.message }, 'Background alert check failed'));
+  }, 60000).unref();
+
+  // The NSE equity directory (search, quotes and charts for every listed stock) refreshes in the background.
+  const { upstoxProvider } = await import('./providers/UpstoxProvider.js');
+  upstoxProvider.directory.ensureFresh();
 
   // HOST (e.g. 127.0.0.1) limits who can reach the API; unset, it listens on every interface as before.
   const host = process.env.HOST || undefined;

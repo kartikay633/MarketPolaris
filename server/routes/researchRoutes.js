@@ -9,8 +9,14 @@ import path from 'node:path';
 
 const router=Router();
 router.use((_req,res,next)=>{res.set('Cache-Control','no-store');next();});
-router.get('/status',async(_req,res)=>{
-  try {res.json(await researchStatus());}
+// ?view=page returns only what the Polaris AI page reads (about half the size); the full status is the default.
+router.get('/status',async(req,res)=>{
+  try {
+    const status=await researchStatus();
+    if(req.query.view!=='page') return res.json(status);
+    res.json({collection:{instruments:(status.collection?.instruments||[]).map(i=>({symbol:i.symbol,benchmark:Boolean(i.benchmark),status:i.status}))},
+      predictions:status.predictions,riskPredictions:status.riskPredictions,stale:status.stale,serverTime:status.serverTime});
+  }
   catch {res.status(503).json({error:'Research artifacts are unavailable or invalid. Run the local research pipeline and retry.'});}
 });
 // Matches existing public market-research access. No account data or model training mutations exposed.
@@ -35,10 +41,10 @@ router.post('/advisor/review',advisorLimit,async(req,res)=>{
 // is open). Only on a trading day from 9:15 IST, and only from the live feed, so a holiday, saved
 // candles or fallbacks never pass for today's prices. After the close they are today's closing prices.
 async function livePrices(now = new Date()) {
-  const market = getMarketStatus();
+  const market = getMarketStatus(now);
   const ist = new Date(now.getTime() + 19800000);
   const minutes = ist.getUTCHours() * 60 + ist.getUTCMinutes();
-  if (market.status === 'PRE_MARKET' || (market.status === 'CLOSED' && (market.reason !== 'Outside trading hours' || minutes < 9 * 60 + 15))) return null;
+  if (!market.tradingDay || minutes < market.session.open) return null;
   try {
     const { upstoxProvider } = await import('../providers/UpstoxProvider.js');
     const snap = await upstoxProvider.getSnapshot();
