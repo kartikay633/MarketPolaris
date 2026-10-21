@@ -24,6 +24,32 @@ rollout; the result is still written up in `ml/RESULTS.md`.
 * If the 4B fails and the 7B passes, the 7B is used only for the filing types where the 4B
   failed, within a backfill budget of one week of overnight runs.
 
+**Stage 1 outcome (21 October 2026): not passed** (4B only; 92.1% facts, 89.1% numbers; see
+`ml/RESULTS.md`). The 7B comparison could not run within 16 GB of RAM.
+
+## Stage 1b: letter-style filings only (written 21 October 2026, before the sample is drawn)
+
+The stage 1 errors concentrated in table-heavy filings. That split was found after the results, so
+it is tested here on fresh filings rather than accepted.
+
+* **Scope (the reader's only categories if this passes):** Press Release, Outcome of Board Meeting,
+  Change in Management, Credit Rating, News Verification, Action(s) taken or orders passed,
+  Action(s) initiated or orders passed, Resignation, Cessation, Monthly Business Updates, Change in
+  Auditors, Pendency of Litigation(s)/dispute(s) or the outcome impacting the Company, Acquisition.
+* **Excluded for good:** Related Party Transaction(s), Investor Presentation, Financial Result
+  Updates, Disclosure under SEBI Takeover Regulations, Amalgamation/Merger. Their numbers come from
+  structured sources (XBRL) or need a table parser.
+* **Sample:** 70 filings from the same period (2022-01-01 to 2024-12-03), drawn once with seed
+  20261021, stratified across the 13 categories (6 per category, then 70 at random), excluding every
+  filing in the stage 1 sample. At least 60 must be readable, or the sample is topped up from the
+  same draw order.
+* **Unchanged from stage 1:** model and settings (Qwen3 4B, prompt and schema as committed in
+  `ml/filing_extract.py` at the stage 1 run), verbatim quote and number check, grading definitions
+  (`ml/filing_grade.py`), and the gate: **at least 90% of facts correct and at least 95% of numeric
+  facts correct**.
+* If stage 1b passes, stage 2 starts for these categories only. If it fails, the local reader is
+  paused, and only a stronger model, retested from stage 1, can restart it.
+
 ## Stage 2: does it add information the headline does not? (development data only)
 
 * Filings from 2022-01 to 2024-12-03 (the development period), with 1-minute prices from
