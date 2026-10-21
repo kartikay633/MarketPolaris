@@ -1,35 +1,10 @@
 // ROADMAP: Section 6, 7 & 12 — Price Alerts Repository
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { persistentMap, persist } from './localStore.js';
 
 // In-memory fallback: userId -> Array of alerts
-const memoryAlerts = new Map();
-
-// Seed initial demo alerts for demo-trader
-memoryAlerts.set('demo-trader', [
-  {
-    id: 'alt-101',
-    userId: 'demo-trader',
-    symbol: 'NSE:RELIANCE',
-    targetPrice: 3100.00,
-    condition: 'ABOVE', // 'ABOVE' | 'BELOW'
-    status: 'ACTIVE', // 'ACTIVE' | 'TRIGGERED' | 'CANCELLED'
-    note: 'Resistance breakout target',
-    createdAt: new Date(Date.now() - 3600000 * 24).toISOString(),
-    triggeredAt: null,
-  },
-  {
-    id: 'alt-102',
-    userId: 'demo-trader',
-    symbol: 'NSE:TCS',
-    targetPrice: 2050.00,
-    condition: 'BELOW',
-    status: 'ACTIVE',
-    note: 'Support retest entry',
-    createdAt: new Date(Date.now() - 3600000 * 12).toISOString(),
-    triggeredAt: null,
-  },
-]);
+const memoryAlerts = persistentMap('alerts');
 
 export class AlertRepository {
   async getAlerts(userId) {
@@ -96,6 +71,7 @@ export class AlertRepository {
       memoryAlerts.set(userId, []);
     }
     memoryAlerts.get(userId).unshift(newAlert);
+    persist();
     return newAlert;
   }
 
@@ -109,6 +85,7 @@ export class AlertRepository {
     if (memoryAlerts.has(userId)) {
       const filtered = memoryAlerts.get(userId).filter((a) => a.id !== alertId);
       memoryAlerts.set(userId, filtered);
+      persist();
     }
     return { success: true, id: alertId };
   }
@@ -132,6 +109,7 @@ export class AlertRepository {
         if (status === 'TRIGGERED') {
           target.triggeredAt = new Date().toISOString();
         }
+        persist();
       }
     }
   }

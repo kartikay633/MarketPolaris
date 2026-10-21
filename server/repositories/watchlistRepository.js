@@ -1,9 +1,10 @@
 // ROADMAP: Section 6, 7 & 17 — Watchlist Repository
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { persistentMap, persist } from './localStore.js';
 
 // In-memory fallback map: userId -> Set of symbols
-const memoryWatchlists = new Map();
+const memoryWatchlists = persistentMap('watchlists', { encode: (s) => [...s], decode: (a) => new Set(a) });
 
 // Default seed symbols for new users
 const DEFAULT_SYMBOLS = ['NSE:RELIANCE', 'NSE:TCS', 'NSE:HDFCBANK', 'NSE:INFY', 'NSE:TATAMOTORS'];
@@ -60,6 +61,7 @@ export class WatchlistRepository {
       memoryWatchlists.set(userId, new Set(DEFAULT_SYMBOLS));
     }
     memoryWatchlists.get(userId).add(cleanSym);
+    persist();
     return Array.from(memoryWatchlists.get(userId));
   }
 
@@ -77,6 +79,7 @@ export class WatchlistRepository {
 
     if (memoryWatchlists.has(userId)) {
       memoryWatchlists.get(userId).delete(cleanSym);
+      persist();
       return Array.from(memoryWatchlists.get(userId));
     }
     return [];

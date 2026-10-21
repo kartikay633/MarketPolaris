@@ -1,11 +1,12 @@
 // ROADMAP: Section 6, 7, 11 & 17 — Trade Repository
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { persistentMap, persist } from './localStore.js';
 
 // In-memory fallback structures
-const memoryAccounts = new Map(); // userId -> { cashBalance: 1000000.00 }
-const memoryPositions = new Map(); // userId -> Map(symbol -> { symbol, quantity, avgPrice })
-const memoryOrders = new Map(); // userId -> Array of orders
+const memoryAccounts = persistentMap('paperAccounts'); // userId -> { cashBalance }
+const memoryPositions = persistentMap('paperPositions', { encode: (m) => Object.fromEntries(m), decode: (o) => new Map(Object.entries(o)) }); // userId -> Map(symbol -> position)
+const memoryOrders = persistentMap('paperOrders'); // userId -> Array of orders
 
 export class TradeRepository {
   async getAccount(userId) {
@@ -40,6 +41,7 @@ export class TradeRepository {
     }
 
     memoryAccounts.set(userId, { userId, cashBalance: newBalance });
+    persist();
     return { userId, cashBalance: newBalance };
   }
 
@@ -118,6 +120,7 @@ export class TradeRepository {
     } else {
       userPos.set(cleanSym, { symbol: cleanSym, quantity, avgPrice });
     }
+    persist();
   }
 
   async createOrder(userId, order) {
@@ -151,6 +154,7 @@ export class TradeRepository {
       memoryOrders.set(userId, []);
     }
     memoryOrders.get(userId).unshift(orderRecord);
+    persist();
 
     return orderRecord;
   }
@@ -196,6 +200,7 @@ export class TradeRepository {
     }
     memoryAccounts.set(userId, { userId, cashBalance: 1000000.00 });
     memoryPositions.delete(userId);
+    persist();
     return { userId, cashBalance: 1000000.00 };
   }
 

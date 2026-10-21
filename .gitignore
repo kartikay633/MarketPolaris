@@ -43,3 +43,6 @@ data/pulse/
 __pycache__/
 *.pyc
 catboost_info/
+
+# Local app state (paper trades, watchlists, alerts, profiles) when PostgreSQL is not running
+data/app/

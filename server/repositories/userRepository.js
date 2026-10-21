@@ -1,9 +1,10 @@
 // ROADMAP: Section 6, 7 & 17 — User Repository
 import { query } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { persistentMap, persist } from './localStore.js';
 
 // In-memory fallback cache in case local Postgres container is not currently spun up
-const memoryProfiles = new Map();
+const memoryProfiles = persistentMap('profiles');
 const memoryPaperAccounts = new Map();
 const memoryWatchlists = new Map();
 
@@ -57,6 +58,7 @@ export class UserRepository {
         createdAt: new Date().toISOString(),
       };
       memoryProfiles.set(userId, profile);
+      persist();
       return profile;
     }
   }
@@ -109,6 +111,7 @@ export class UserRepository {
         updatedAt: new Date().toISOString(),
       };
       memoryProfiles.set(userId, updated);
+      persist();
       return updated;
     }
   }
