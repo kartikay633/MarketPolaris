@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { login, loginWithGoogle } = useAuthStore();
+  const { login, loginWithGoogle, continueAsGuest } = useAuthStore();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -40,6 +40,12 @@ export default function LoginPage() {
     }
   };
 
+  const handleGuest = () => {
+    continueAsGuest();
+    toast.success('Signed in as a guest on this device');
+    navigate('/dashboard');
+  };
+
   const handleGoogleSignIn = async () => {
     try {
       setIsGoogleSubmitting(true);
@@ -54,10 +60,10 @@ export default function LoginPage() {
     <div>
       <div style={{ marginBottom: '20px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 600, color: 'var(--text-primary)', margin: '0 0 4px' }}>
-          Terminal Access
+          Sign in
         </h2>
         <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
-          Sign in to access real-time market telemetry and paper trading
+          Live NSE prices, Polaris AI research and paper trading
         </p>
       </div>
 
@@ -142,16 +148,29 @@ export default function LoginPage() {
           {isSubmitting ? (
             <>
               <Loader2 size={15} className="animate-spin" />
-              <span>Authenticating...</span>
+              <span>Signing in…</span>
             </>
           ) : (
             <>
-              <span>Sign In to Terminal</span>
+              <span>Sign in</span>
               <ArrowRight size={15} />
             </>
           )}
         </button>
       </form>
+
+      {/* Guest access: no account, data stays on this device */}
+      <button
+        type="button"
+        className="btn btn-ghost"
+        onClick={handleGuest}
+        style={{ width: '100%', marginTop: '10px', justifyContent: 'center' }}
+      >
+        Continue as guest
+      </button>
+      <p style={{ margin: '4px 0 0', textAlign: 'center', fontSize: '11px', color: 'var(--text-muted)' }}>
+        No account needed; your paper portfolio, watchlist and alerts stay on this device.
+      </p>
 
       {/* Switch to Signup */}
       <div style={{ marginTop: '16px', textAlign: 'center', fontSize: '12.5px', color: 'var(--text-muted)' }}>

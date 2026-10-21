@@ -1,7 +1,49 @@
 // ROADMAP: Section 5 & Phase 1 — Auth Store (Zustand)
+// Two ways in: a real Supabase account (email/password or Google), or an explicit guest session
+// kept on this device. A wrong password is always an error; nobody is signed in silently.
 import { create } from 'zustand';
 import { supabase } from '../services/supabase';
 import api from '../services/api';
+
+const LOCAL_KEY = 'market_pulse_user';
+
+const nameFor = (user) => user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Guest';
+
+// A guest (or locally edited) profile saved on this device only.
+function localSession(user) {
+  return {
+    user,
+    session: { access_token: 'local_token', user },
+    profile: {
+      id: user.id,
+      email: user.email || null,
+      displayName: nameFor(user),
+      full_name: nameFor(user),
+      experienceLevel: 'intermediate',
+      onboardingCompleted: true,
+      isGuest: Boolean(user.guest),
+    },
+    isAuthenticated: true,
+  };
+}
+
+function readLocalUser() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LOCAL_KEY) || 'null');
+    return saved?.id ? saved : null;
+  } catch {
+    localStorage.removeItem(LOCAL_KEY);
+    return null;
+  }
+}
+
+// Supabase answers wrong credentials with an auth error; a network failure means the service is unreachable.
+const friendly = (err, fallback) => {
+  const msg = err?.message || fallback;
+  return /fetch|network|failed to fetch|load failed/i.test(msg)
+    ? 'The sign-in service is unreachable right now. Try again, or continue as a guest.'
+    : msg;
+};
 
 export const useAuthStore = create((set, get) => ({
   user: null,
@@ -11,28 +53,22 @@ export const useAuthStore = create((set, get) => ({
   isLoading: true,
   error: null,
 
-  // Initialize auth state and subscribe to Supabase auth events
+  // Restore a Supabase session or a saved guest session; otherwise the user is signed out.
   initialize: async () => {
     try {
       set({ isLoading: true, error: null });
 
       // Handle OAuth PKCE callback if code is in URL search params
-      const searchParams = new URLSearchParams(window.location.search);
-      const code = searchParams.get('code');
+      const code = new URLSearchParams(window.location.search).get('code');
       if (code) {
         try {
           const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
           if (exchangeError) {
             console.warn('OAuth code exchange warning in initialize:', exchangeError.message);
           } else if (data?.session) {
-            set({
-              user: data.session.user,
-              session: data.session,
-              isAuthenticated: true,
-            });
+            set({ user: data.session.user, session: data.session, isAuthenticated: true });
             await get().fetchProfile();
             window.history.replaceState({}, document.title, window.location.pathname);
-            set({ isLoading: false });
             return;
           }
         } catch (exchangeErr) {
@@ -40,188 +76,46 @@ export const useAuthStore = create((set, get) => ({
         }
       }
 
-      const { data: { session }, error } = await supabase.auth.getSession();
-
+      const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        set({
-          user: session.user,
-          session,
-          isAuthenticated: true,
-        });
+        set({ user: session.user, session, isAuthenticated: true });
         await get().fetchProfile();
       } else {
-        // Check for persisted local terminal session
-        const savedUserStr = localStorage.getItem('market_pulse_user');
-        if (savedUserStr) {
-          try {
-            const savedUser = JSON.parse(savedUserStr);
-            const userEmail = (savedUser.email && savedUser.email !== 'trader@marketpulse.in' && savedUser.email !== 'demo@marketpulse.in')
-              ? savedUser.email
-              : 'kartikay633@gmail.com';
-            const userName = savedUser.user_metadata?.display_name || savedUser.user_metadata?.full_name || 'Kartikay Gupta';
-
-            savedUser.email = userEmail;
-            savedUser.user_metadata = {
-              ...(savedUser.user_metadata || {}),
-              display_name: userName,
-              full_name: userName,
-            };
-
-            set({
-              user: savedUser,
-              session: { access_token: 'local_token', user: savedUser },
-              profile: {
-                id: savedUser.id,
-                email: userEmail,
-                displayName: userName,
-                full_name: userName,
-                experienceLevel: 'intermediate',
-                onboardingCompleted: true,
-              },
-              isAuthenticated: true,
-            });
-          } catch (e) {
-            localStorage.removeItem('market_pulse_user');
-          }
-        } else {
-          // Default to pre-authenticated terminal operator session
-          const defaultTrader = {
-            id: 'trader-institutional-01',
-            email: 'kartikay633@gmail.com',
-            user_metadata: { display_name: 'Kartikay Gupta', full_name: 'Kartikay Gupta' },
-          };
-          set({
-            user: defaultTrader,
-            session: { access_token: 'local_token', user: defaultTrader },
-            profile: {
-              id: defaultTrader.id,
-              email: defaultTrader.email,
-              displayName: 'Kartikay Gupta',
-              full_name: 'Kartikay Gupta',
-              experienceLevel: 'intermediate',
-              onboardingCompleted: true,
-            },
-            isAuthenticated: true,
-          });
-        }
+        const saved = readLocalUser();
+        if (saved) set(localSession(saved));
       }
 
       // Listen for auth changes (token refresh, sign in, sign out)
       supabase.auth.onAuthStateChange(async (event, newSession) => {
         if (newSession?.user) {
-          set({
-            user: newSession.user,
-            session: newSession,
-            isAuthenticated: true,
-          });
-          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
-            await get().fetchProfile();
-          }
-        } else if (event === 'SIGNED_OUT') {
-          localStorage.removeItem('market_pulse_user');
-          set({
-            user: null,
-            session: null,
-            profile: null,
-            isAuthenticated: false,
-          });
+          set({ user: newSession.user, session: newSession, isAuthenticated: true });
+          if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') await get().fetchProfile();
+        } else if (event === 'SIGNED_OUT' && !get().profile?.isGuest) {
+          set({ user: null, session: null, profile: null, isAuthenticated: false });
         }
       });
     } catch (err) {
       console.error('Failed to initialize auth store:', err);
-      // Even if supabase fails, ensure terminal operator can access
-      const defaultTrader = {
-        id: 'trader-institutional-01',
-        email: 'kartikay633@gmail.com',
-        user_metadata: { display_name: 'Kartikay Gupta', full_name: 'Kartikay Gupta' },
-      };
-      set({
-        user: defaultTrader,
-        session: { access_token: 'local_token', user: defaultTrader },
-        profile: {
-          id: defaultTrader.id,
-          email: defaultTrader.email,
-          displayName: 'Kartikay Gupta',
-          full_name: 'Kartikay Gupta',
-          experienceLevel: 'intermediate',
-          onboardingCompleted: true,
-        },
-        isAuthenticated: true,
-        isLoading: false,
-      });
+      // The sign-in service is unreachable: a saved guest session still works.
+      const saved = readLocalUser();
+      if (saved) set(localSession(saved));
     } finally {
       set({ isLoading: false });
     }
   },
 
-  // Email/Password login
+  // Email/Password login (Supabase verifies the password)
   login: async (email, password) => {
     set({ isLoading: true, error: null });
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        // Fallback for custom credentials
-        if (email && password) {
-          const fallbackUser = {
-            id: 'trader-' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12),
-            email,
-            user_metadata: { display_name: email.split('@')[0] },
-          };
-          localStorage.setItem('market_pulse_user', JSON.stringify(fallbackUser));
-          set({
-            user: fallbackUser,
-            session: { access_token: 'local_token', user: fallbackUser },
-            profile: {
-              id: fallbackUser.id,
-              email,
-              displayName: email.split('@')[0],
-              experienceLevel: 'intermediate',
-              onboardingCompleted: true,
-            },
-            isAuthenticated: true,
-            isLoading: false,
-          });
-          return { success: true, user: fallbackUser };
-        }
-        throw error;
-      }
-
-      set({
-        user: data.user,
-        session: data.session,
-        isAuthenticated: true,
-      });
-
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      localStorage.removeItem(LOCAL_KEY);
+      set({ user: data.user, session: data.session, isAuthenticated: true });
       await get().fetchProfile();
       return { success: true, user: data.user };
     } catch (err) {
-      if (email && password) {
-        const fallbackUser = {
-          id: 'trader-' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12),
-          email,
-          user_metadata: { display_name: email.split('@')[0] },
-        };
-        localStorage.setItem('market_pulse_user', JSON.stringify(fallbackUser));
-        set({
-          user: fallbackUser,
-          session: { access_token: 'local_token', user: fallbackUser },
-          profile: {
-            id: fallbackUser.id,
-            email,
-            displayName: email.split('@')[0],
-            experienceLevel: 'intermediate',
-            onboardingCompleted: true,
-          },
-          isAuthenticated: true,
-          isLoading: false,
-        });
-        return { success: true, user: fallbackUser };
-      }
-      const msg = err.message || 'Failed to sign in';
+      const msg = friendly(err, 'Failed to sign in');
       set({ error: msg });
       return { success: false, error: msg };
     } finally {
@@ -236,51 +130,17 @@ export const useAuthStore = create((set, get) => ({
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
-        options: {
-          data: {
-            display_name: displayName,
-          },
-        },
+        options: { data: { display_name: displayName } },
       });
-
-      if (error) {
-        if (email && password) {
-          const fallbackUser = {
-            id: 'trader-' + btoa(email).replace(/[^a-zA-Z0-9]/g, '').slice(0, 12),
-            email,
-            user_metadata: { display_name: displayName || email.split('@')[0] },
-          };
-          localStorage.setItem('market_pulse_user', JSON.stringify(fallbackUser));
-          set({
-            user: fallbackUser,
-            session: { access_token: 'local_token', user: fallbackUser },
-            profile: {
-              id: fallbackUser.id,
-              email,
-              displayName: displayName || email.split('@')[0],
-              experienceLevel: 'intermediate',
-              onboardingCompleted: true,
-            },
-            isAuthenticated: true,
-            isLoading: false,
-          });
-          return { success: true, user: fallbackUser, session: true };
-        }
-        throw error;
-      }
-
+      if (error) throw error;
       if (data.session) {
-        set({
-          user: data.user,
-          session: data.session,
-          isAuthenticated: true,
-        });
+        localStorage.removeItem(LOCAL_KEY);
+        set({ user: data.user, session: data.session, isAuthenticated: true });
         await get().fetchProfile();
       }
-
       return { success: true, user: data.user, session: data.session };
     } catch (err) {
-      const msg = err.message || 'Failed to sign up';
+      const msg = friendly(err, 'Failed to sign up');
       set({ error: msg });
       return { success: false, error: msg };
     } finally {
@@ -296,64 +156,36 @@ export const useAuthStore = create((set, get) => ({
         provider: 'google',
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
-          queryParams: {
-            access_type: 'offline',
-            prompt: 'select_account',
-          },
+          queryParams: { access_type: 'offline', prompt: 'select_account' },
         },
       });
       if (error) throw error;
       return data;
     } catch (err) {
-      set({ error: err.message, isLoading: false });
+      set({ error: friendly(err, 'Google sign-in failed'), isLoading: false });
       throw err;
     }
   },
 
-  // Instant Demo Trader Login for immediate platform access
-  loginAsDemo: () => {
-    const demoUser = {
-      id: 'demo-trader-001',
-      email: 'kartikay633@gmail.com',
-      user_metadata: { display_name: 'Kartikay Gupta', full_name: 'Kartikay Gupta' },
-    };
-    const demoProfile = {
-      id: 'demo-trader-001',
-      email: 'kartikay633@gmail.com',
-      displayName: 'Kartikay Gupta',
-      full_name: 'Kartikay Gupta',
-      experienceLevel: 'intermediate',
-      interestedSectors: ['Information Technology (IT)', 'Banking & Financials', 'Automobiles & EV'],
-      onboardingCompleted: true,
-      createdAt: new Date().toISOString(),
-    };
-    set({
-      user: demoUser,
-      session: { access_token: 'demo_token', user: demoUser },
-      profile: demoProfile,
-      isAuthenticated: true,
-      isLoading: false,
-      error: null,
-    });
+  // Guest session on this device: paper trading, watchlist and alerts without an account.
+  continueAsGuest: () => {
+    const guest = { id: 'guest', guest: true, email: null, user_metadata: { display_name: 'Guest' } };
+    localStorage.setItem(LOCAL_KEY, JSON.stringify(guest));
+    set({ ...localSession(guest), isLoading: false, error: null });
     return { success: true };
   },
+  loginAsDemo: () => get().continueAsGuest(),
 
   // Logout
   logout: async () => {
     set({ isLoading: true });
     try {
+      localStorage.removeItem(LOCAL_KEY);
       await supabase.auth.signOut();
-      set({
-        user: null,
-        session: null,
-        profile: null,
-        isAuthenticated: false,
-        error: null,
-      });
     } catch (err) {
       console.error('Error logging out:', err);
     } finally {
-      set({ isLoading: false });
+      set({ user: null, session: null, profile: null, isAuthenticated: false, error: null, isLoading: false });
     }
   },
 
@@ -361,9 +193,7 @@ export const useAuthStore = create((set, get) => ({
   fetchProfile: async () => {
     try {
       const res = await api.get('/user/profile');
-      if (res.data?.profile) {
-        set({ profile: res.data.profile });
-      }
+      if (res.data?.profile) set({ profile: res.data.profile });
       return res.data?.profile;
     } catch (err) {
       console.warn('Could not fetch user profile from server:', err.message);
@@ -374,7 +204,7 @@ export const useAuthStore = create((set, get) => ({
           profile: {
             id: currentUser.id,
             email: currentUser.email,
-            displayName: currentUser.user_metadata?.display_name || currentUser.email?.split('@')[0],
+            displayName: nameFor(currentUser),
             experienceLevel: 'beginner',
             interestedSectors: [],
             onboardingCompleted: false,
@@ -389,35 +219,22 @@ export const useAuthStore = create((set, get) => ({
   updateProfile: async (updates) => {
     try {
       const currentUser = get().user || {};
-      const newEmail = updates.email || currentUser.email || 'kartikay633@gmail.com';
-      const newName = updates.displayName || updates.display_name || updates.full_name || currentUser.user_metadata?.display_name || 'Kartikay Gupta';
-
+      const newEmail = updates.email || currentUser.email || null;
+      const newName = updates.displayName || updates.display_name || updates.full_name || nameFor(currentUser);
       const updatedUser = {
         ...currentUser,
         email: newEmail,
-        user_metadata: {
-          ...(currentUser.user_metadata || {}),
-          display_name: newName,
-          full_name: newName,
-        },
+        user_metadata: { ...(currentUser.user_metadata || {}), display_name: newName, full_name: newName },
       };
+      const updatedProfile = { ...(get().profile || {}), ...updates, email: newEmail, displayName: newName, full_name: newName };
 
-      const updatedProfile = {
-        ...(get().profile || {}),
-        ...updates,
-        email: newEmail,
-        displayName: newName,
-        full_name: newName,
-      };
-
-      localStorage.setItem('market_pulse_user', JSON.stringify(updatedUser));
+      // A guest's profile lives on this device; an account's is saved on the server.
+      if (get().profile?.isGuest || get().session?.access_token === 'local_token') localStorage.setItem(LOCAL_KEY, JSON.stringify(updatedUser));
       set({ user: updatedUser, profile: updatedProfile });
 
       try {
         const res = await api.patch('/user/profile', updates);
-        if (res.data?.profile) {
-          set({ profile: { ...updatedProfile, ...res.data.profile } });
-        }
+        if (res.data?.profile) set({ profile: { ...updatedProfile, ...res.data.profile } });
       } catch (_) {}
 
       return { success: true, profile: updatedProfile };

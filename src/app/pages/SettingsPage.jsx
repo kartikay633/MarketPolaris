@@ -29,14 +29,11 @@ export default function SettingsPage() {
   const { data: portfolio } = usePortfolio();
 
   const [defaultChartType, setDefaultChartType] = useState(() => localStorage.getItem('mp_default_chart') || 'Candles');
-  const [refreshInterval, setRefreshInterval] = useState(() => localStorage.getItem('mp_refresh_interval') || '15');
   const [isResetting, setIsResetting] = useState(false);
 
   // Profile Edit State
-  const resolvedDisplayName = profile?.displayName || profile?.full_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || 'Kartikay Gupta';
-  const resolvedEmail = (user?.email && user.email !== 'trader@marketpulse.in' && user.email !== 'demo@marketpulse.in')
-    ? user.email
-    : (profile?.email && profile.email !== 'trader@marketpulse.in' ? profile.email : 'kartikay633@gmail.com');
+  const resolvedDisplayName = profile?.displayName || profile?.full_name || user?.user_metadata?.display_name || user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Guest';
+  const resolvedEmail = user?.email || profile?.email || '';
 
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [editName, setEditName] = useState(resolvedDisplayName);
@@ -61,11 +58,6 @@ export default function SettingsPage() {
     toast.success(`Default chart type set to ${type}`);
   };
 
-  const handleIntervalChange = (val) => {
-    setRefreshInterval(val);
-    localStorage.setItem('mp_refresh_interval', val);
-    toast.success(`Data refresh interval updated to ${val}s`);
-  };
 
   const handleSaveProfile = async (e) => {
     e?.preventDefault();
@@ -167,7 +159,7 @@ export default function SettingsPage() {
                       className="input"
                       value={editName}
                       onChange={(e) => setEditName(e.target.value)}
-                      placeholder="e.g. Kartikay Gupta"
+                      placeholder="Your name"
                       style={{ fontSize: '13px', padding: '8px 12px' }}
                     />
                   </div>
@@ -179,7 +171,7 @@ export default function SettingsPage() {
                       className="input"
                       value={editEmail}
                       onChange={(e) => setEditEmail(e.target.value)}
-                      placeholder="e.g. kartikay633@gmail.com"
+                      placeholder="you@example.com"
                       style={{ fontSize: '13px', padding: '8px 12px' }}
                     />
                   </div>
@@ -247,15 +239,15 @@ export default function SettingsPage() {
           {/* Terminal Preferences */}
           <div className="card card-body">
             <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '14px' }}>
-              Terminal Preferences
+              Preferences
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {/* Terminal Theme */}
               <div className="settings-row">
                 <div>
-                  <div className="settings-label">Terminal Color Theme</div>
-                  <div className="settings-description">Toggle between High-Contrast OLED Dark Mode and Institutional Light Mode</div>
+                  <div className="settings-label">Theme</div>
+                  <div className="settings-description">Dark or light appearance</div>
                 </div>
                 <div className="settings-toggle-group">
                   <button
@@ -280,8 +272,8 @@ export default function SettingsPage() {
               {/* Default Chart Type */}
               <div className="settings-row">
                 <div>
-                  <div className="settings-label">Default Chart Style</div>
-                  <div className="settings-description">Select preferred series representation on stock pages</div>
+                  <div className="settings-label">Default chart style</div>
+                  <div className="settings-description">How stock charts open; you can still switch on each chart</div>
                 </div>
                 <div className="settings-toggle-group">
                   {['Candles', 'Line', 'Area'].map((type) => (
@@ -296,24 +288,6 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              {/* Refresh Interval */}
-              <div className="settings-row">
-                <div>
-                  <div className="settings-label">Market Data Polling Rate</div>
-                  <div className="settings-description">Background interval for updating quote telemetry</div>
-                </div>
-                <div className="settings-toggle-group">
-                  {['5', '15', '30', '60'].map((sec) => (
-                    <button
-                      key={sec}
-                      onClick={() => handleIntervalChange(sec)}
-                      className={`settings-toggle-btn${refreshInterval === sec ? ' settings-toggle-btn--active' : ''}`}
-                    >
-                      {sec}s
-                    </button>
-                  ))}
-                </div>
-              </div>
             </div>
           </div>
 
@@ -321,7 +295,7 @@ export default function SettingsPage() {
           <div className="card card-body" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
               <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)' }}>Sign Out</div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Clear local session token and return to authentication portal</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>Sign out of this browser and return to the sign-in page</div>
             </div>
             <button className="btn btn-danger" onClick={handleLogout}>
               <LogOut size={13} />

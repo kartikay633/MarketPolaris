@@ -39,7 +39,7 @@ export default function ProtectedRoute({ children }) {
           <Loader2 size={20} color="#fff" className="animate-spin" />
         </div>
         <p style={{ fontSize: '13px', color: '#a0a0b8', letterSpacing: '0.05em' }}>
-          VERIFYING TERMINAL SESSION...
+          LOADING YOUR SESSION…
         </p>
       </div>
     );
