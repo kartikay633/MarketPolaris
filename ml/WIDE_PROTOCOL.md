@@ -53,3 +53,41 @@ tuned for the wide universe. The holdout is scored once; a failed gate is not re
   pages for the added stocks, labelled with their own holdout accuracy.
 * **Gate 1 or 2 fails:** nothing from the wide models is used. The result is written up in
   `ml/RESULTS.md` either way.
+
+## Amendment 1 (21 October 2026, before any wide model is trained or scored)
+
+The founders asked for the best model the data allows, with no time limit. The unchanged-code run
+above was stopped before its training began, so no wide result of any kind exists. This amendment
+was written while the extra decade of candles (item 1) was downloading; nothing else had run.
+
+1. **Twenty years of history** where Upstox has it: daily candles from 22 October 2006 (India VIX
+   from March 2009), adding the 2008, 2011, 2013 and 2015-16 stress periods. Individual invalid
+   candles are dropped (and `ml.pulse.load_candles` validates again) instead of rejecting a whole
+   stock, which restores Mazagon Dock, South Indian Bank, Vodafone Idea and Yes Bank.
+   Implementation: `scripts/pulse-wide-history.js`.
+2. **Holdout fixed by date:** every row dated on or after **4 December 2024**, the start of v4's
+   risk holdout, so all comparisons use the same unseen period. Development is every earlier row
+   whose label ends before that date; four expanding, purged walk-forward folds start at 40%, 55%,
+   70% and 85% of development dates, as in v4.
+3. **Candidates, declared now.** Development folds only choose among these.
+   * Risk (same target, calibration and refit-every-63-sessions holdout protocol as v4):
+     * *R-v4*: v4's inputs and its four candidates (persistence, logistic, gbm, ensemble), v4 settings.
+     * *R-wide*: v4's inputs plus four same-date cross-sectional inputs: the stock's volatility
+       versus its sector's median, the same-date rank of current-versus-normal volatility, the
+       same-date rank of 20-session traded value, and the share of stocks whose volatility is above
+       normal (market-wide stress breadth); the same four candidates.
+     * *R-gbm+*: gradient boosting with more capacity (600 trees, learning rate 0.03, 63 leaves,
+       minimum leaf 1,000) on R-wide inputs, alone and averaged with the logistic model.
+   * Ranking (20-session peer target decides; 5-session reported):
+     * *K-v2*: rank-v2's inputs and seven candidates.
+     * *K-wide*: plus the same-date ranks of 20-session traded value and of the 120-session return
+       relative to the sector; the same candidates.
+     * *K-gbm+*: boosting with more capacity (500 trees, learning rate 0.02, 31 leaves, minimum
+       leaf 2,000) on K-wide inputs, alone and averaged with the logistic model.
+4. **Selection:** highest mean development ROC AUC (risk) and highest mean development rank IC
+   (ranking, 20 sessions). Candidates within 0.002 of the best count as tied; the simpler wins
+   (fewer inputs, then less capacity).
+5. **Final evaluation, once:** the selected candidates and the best unchanged-method candidates
+   (R-v4, K-v2) are scored on the holdout in one run (`python -m ml.wide final`). The gates above
+   apply to the selected candidates, unchanged; the unchanged-method scores are reported beside
+   them. Gate 2 compares with v4's saved holdout predictions on shared stock-dates.
