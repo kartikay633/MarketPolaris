@@ -24,9 +24,10 @@ const RULES = [
   ['deals', /\b(?:acqui|merger|amalgamat|demerg|takeover|buyout|stake\b|open offer|joint venture|\bjv\b|divest|strategic investment|swap)/i],
   ['capital', /\b(?:ipo|qip|fund ?rais|raises? (?:rs|₹|\$)|rights issue|preferential|ncds?\b|bonds?\b|ofs\b|offer for sale|block deal|bulk deal|private placement|listing|allotment of (?:equity|shares|securities))/i],
   ['orders', /\b(?:orders?|contracts?|bags?|bagging|wins? (?:bid|deal|project)|secures?|letter of (?:award|intent)|loa|tender)\b/i],
-  ['management', /\b(?:ceo|cfo|coo|\bmd\b|managing director|chairman|chairperson|director|resign|steps? down|appoint|elevat|succession|kmp|auditor)/i],
+  // A change at the top, not a quote from the chairman.
+  ['management', /\b(?:re-?appoint|appoint|resign|steps? down|stepping down|quits?\b|ousted|sacked|removed as|elevat|succession|succeeds?\b|names? (?:new |its )?(?:ceo|cfo|coo|md|chairman|chairperson|chief)|new (?:ceo|cfo|coo|md|chairman|chairperson|chief)|takes? charge|cessation|kmp|auditor)/i],
   ['corporate', /\b(?:dividend|buyback|bonus (?:issue|shares)|stock split|split|record date|delist)/i],
-  ['operations', /\b(?:plant|capacity|capex|expansion|launch|unveil|usfda|approval|commission|production|sales (?:rise|fall|grow)|volumes?|partnership|tie[- ]up|agreement|mou|deal with|supply)/i],
+  ['operations', /\b(?:plant|capacity|capex|capital expenditure|expan(?:sion|ds?|ding)|launch|unveil|usfda|approval|commission|production|sales (?:rise|fall|grow)|volumes?|partnership|tie[- ]up|agreement|mou|deal with|supply)/i],
 ];
 
 const VIEWS = /\b(?:target price|price target|jefferies|nomura|morgan stanley|goldman|clsa|macquarie|motilal oswal|kotak institutional|icici sec(?:urities)?|brokerages?|analysts? (?:say|see|stay|expect)|upside|downside|buy rating|sell rating|overweight|underweight|should you (?:buy|sell)|buy, sell or hold|experts? (?:see|say|weigh)|re-?rating)\b/i;
