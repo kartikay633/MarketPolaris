@@ -50,6 +50,9 @@ it is tested here on fresh filings rather than accepted.
 * If stage 1b passes, stage 2 starts for these categories only. If it fails, the local reader is
   paused, and only a stronger model, retested from stage 1, can restart it.
 
+**Stage 1b outcome (21 October 2026): not passed** (90.0% facts, 85.7% numbers; see
+`ml/RESULTS.md`). The local reader is paused. Stages 2 to 4 do not start.
+
 ## Stage 2: does it add information the headline does not? (development data only)
 
 * Filings from 2022-01 to 2024-12-03 (the development period), with 1-minute prices from

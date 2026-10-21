@@ -1,5 +1,55 @@
 # Pulse research results
 
+## Filing reader, stage 1b: letter-style filings only — 21 October 2026 (gate not passed; reader paused)
+
+Protocol: `ml/FILING_READER_PROTOCOL.md`, stage 1b (5d5c167, committed before the sample was drawn).
+Same model, prompt, schema, verifier and grading definitions as stage 1. Run
+`python -m ml.filing_pilot sample|fetch|text --set pilot1b`, then
+`python -m ml.filing_extract run --set pilot1b` and `python -m ml.filing_grade score --set pilot1b`.
+
+**Setup.**
+
+* 70 filings from the 13 letter-style categories, 2022 to 2024, drawn once with seed 20261021,
+  none of them in the stage 1 sample. All 70 were fetched and read; none was scanned.
+* Qwen3 4B: median 44 seconds per filing, 51 minutes in total, no errors.
+* The automatic check dropped 39 facts (9%) whose quote or numbers did not appear in the filing.
+
+**Grading.** Every one of the 380 kept facts was checked against the filing text, with the stage 1
+definitions and conventions (a receipt date labelled as the order date, a cap reported as a fixed
+amount, or a value missing the scope that makes it true counts as unsupported).
+
+| | Result | Gate | |
+|---|---|---|---|
+| Facts correct | **342 / 380 = 90.0%** | ≥ 90% | pass, at the line |
+| Facts carrying a number, correct | **180 / 210 = 85.7%** | ≥ 95% | **fail** |
+| Verdicts | 342 correct, 24 unsupported, 14 wrong | | |
+
+**Stage 1b is not passed.** Under the protocol the local reader is paused. Only a stronger model,
+retested from stage 1, can restart it. Nothing from the reader reaches the models, the bots or the
+website.
+
+**The stage 1 split did not hold up on fresh filings.** Letter-style filings scored 95.5% on
+numbers in stage 1, but that split was chosen after seeing the results. On a new sample of the
+same categories the score is 85.7%. Monthly business updates did worst (28/36 numbers correct).
+Without them the score is 152/174 = 87.4%, so restricting the reader further would not have
+passed either. The misses look like stage 1's:
+
+* **Table columns:** NMDC's monthly table (production and sales, this year and last) was read
+  with last year's production as this year's sales in two of three filings. The third filing had
+  a different layout and was read correctly.
+* **Which date:** receipt dates and times reported as order or action dates (DMart, Indus Towers,
+  Torrent, United Spirits); the letter date reported as the fine date (Muthoot); the date of an
+  earlier letter reported as the completion date (Marico); the end of the current term reported
+  as the end of the new one (Persistent).
+* **Caps reported as fixed amounts:** "not exceeding USD 2,981 million" (Hindustan Zinc), "committed
+  to invest up to" (M&M).
+* **Scope:** the 28 subsidiaries left unreviewed reported as all subsidiaries (Pidilite); 23 years of
+  total experience reported as 23 years at P&G.
+
+The verifier still blocks invented numbers. Almost every miss is a real number from the filing
+with the wrong label. A 4B model reading free text cannot be trusted to keep the label straight,
+and a reader that changes decisions needs both the number and its label right.
+
 ## Filing reader, stage 1 pilot: can a local 4B model be trusted? — 21 October 2026 (gate not passed)
 
 Protocol: `ml/FILING_READER_PROTOCOL.md`, stage 1 (committed before any filing was read). Code:
