@@ -630,3 +630,21 @@ input:focus, select:focus, textarea:focus, .input:focus, .select:focus { border-
 .fd-stamp { color: var(--text-dim); letter-spacing: 0.12em; white-space: nowrap; }
 .fd-stamp--live { color: var(--positive-text); }
 .fd-unavailable { display: flex; flex-direction: column; justify-content: center; gap: 6px; min-height: 120px; color: var(--text-muted); font-size: 13px; }
+
+/* Company news wire */
+.badge--warning { color: var(--warning, #f59e0b); background: transparent; border-color: rgba(245, 158, 11, 0.35); }
+.news-card.news-card--key { border-left: 2px solid var(--accent) !important; }
+.nw-panel { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+.nw-panel h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); }
+.nw-panel small { color: var(--text-muted); font-size: 11px; }
+.nw-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--text-secondary); }
+.nw-row button { background: none; border: 0; padding: 0; color: var(--text-primary); font: inherit; cursor: pointer; text-align: left; }
+.nw-row button:hover { color: var(--accent-bright); }
+.nw-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex: 1; max-width: 110px; }
+.nw-bar > span { display: block; height: 100%; background: var(--accent); }
+.nw-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.nw-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.nw-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; padding: 10px 14px; }
+.nw-toggle { display: inline-flex; border: 1px solid var(--border); }
+.nw-toggle button { background: transparent; border: 0; padding: 5px 10px; font-size: 11.5px; color: var(--text-secondary); cursor: pointer; }
+.nw-toggle button.is-active { background: var(--accent-muted, rgba(59,130,246,.16)); color: var(--text-primary); }

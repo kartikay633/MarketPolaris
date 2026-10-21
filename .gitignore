@@ -46,3 +46,6 @@ catboost_info/
 
 # Local app state (paper trades, watchlists, alerts, profiles) when PostgreSQL is not running
 data/app/
+
+# Company news wire (NSE filings and publisher headlines), stored per day
+data/news-wire/

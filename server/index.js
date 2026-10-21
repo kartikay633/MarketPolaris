@@ -111,6 +111,10 @@ async function start() {
     logger.warn({ err }, 'Database not available — server starting without DB');
   }
 
+  // The company news wire refreshes every 5 minutes in the day (NSE filings, publishers, deals, ratings).
+  const { newsWire } = await import('./news/index.js');
+  newsWire.start();
+
   // The official NSE holiday and special-session calendar refreshes every 12 hours.
   startCalendarRefresh({ logger });
 

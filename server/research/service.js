@@ -84,7 +84,8 @@ async function nseFilings(symbol, now) {
 }
 async function stockHeadlines(symbol) {
   const { newsService } = await import('../services/newsService.js');
-  return newsService.getStockNews(symbol,{limit:3});
+  // Publisher stories only: the company's filings already come in as company_filing evidence.
+  return (await newsService.getStockNews(symbol,{limit:8})).filter(n=>n.kind!=='filing').slice(0,3);
 }
 async function recentFilings(dataDir, symbol, days=10, now=new Date()) {
   const file=await readJson(path.join(dataDir,'news-history','announcements',`${symbol}.json`));

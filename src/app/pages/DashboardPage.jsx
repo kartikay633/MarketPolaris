@@ -514,9 +514,7 @@ export default function DashboardPage() {
                             {article.relatedSymbols?.length > 0 && ` · ${article.relatedSymbols.slice(0, 2).map((sym) => sym.replace('NSE:', '')).join(' · ')}`}
                           </span>
                         </span>
-                        <span className={`badge ${article.sentiment === 'positive' ? 'badge--positive' : article.sentiment === 'negative' ? 'badge--negative' : 'badge--neutral'}`}>
-                          {article.sentiment || 'neutral'}
-                        </span>
+                        <span className="badge badge--neutral">{article.category || (article.kind === 'filing' ? 'NSE filing' : 'News')}</span>
                       </a>
                     </li>
                   ))}

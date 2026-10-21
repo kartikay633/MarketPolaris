@@ -8,4 +8,7 @@ const router = Router();
 // GET /api/news — General Indian financial market news
 router.get('/', optionalAuth, (req, res, next) => newsController.getMarketNews(req, res, next));
 
+// GET /api/news/pulse — today's corporate activity, block/bulk deals and rating actions
+router.get('/pulse', optionalAuth, (req, res, next) => newsController.getPulse(req, res, next));
+
 export default router;

@@ -1,51 +1,61 @@
-// ROADMAP: Section 6 & 9 — News Service with In-Memory Caching
-import NodeCache from 'node-cache';
-import { marketauxProvider } from '../providers/MarketauxProvider.js';
+// News for the app, from the company news wire (server/news): NSE filings for every listed company
+// and company stories from Indian business publishers. Marketaux is no longer used.
+import { newsWire } from '../news/index.js';
+import { EVENT_TYPES } from '../news/classify.js';
+import { liveFilings } from '../research/stockFacts.js';
+import { nseClient } from '../providers/nseClient.js';
 import logger from '../utils/logger.js';
 
-// Cache: 10 min for market news, 30 min for stock news (TTLs are set per entry below)
-const cache = new NodeCache({
-  stdTTL: 300,
-  checkperiod: 60,
-});
-
-const MARKET_FETCH = 25; // the most Marketaux returns per request
-const STOCK_FETCH = 10;
+// A wire item in the article shape the pages and the AI already read.
+export function toArticle(x) {
+  return {
+    id: x.id,
+    title: x.title,
+    summary: x.kind === 'filing' ? `${x.companies[0]?.name || x.symbols[0]}: ${x.summary}` : x.summary,
+    source: x.source,
+    sourceUrl: x.sourceUrl,
+    publishedAt: x.publishedAt,
+    category: EVENT_TYPES[x.eventType] || 'Other',
+    eventType: x.eventType,
+    kind: x.kind,
+    materiality: x.materiality,
+    companies: x.companies,
+    relatedSymbols: x.symbols.map((s) => `NSE:${s}`),
+  };
+}
 
 export class NewsService {
-  constructor(provider = marketauxProvider) {
-    this.provider = provider;
-    this.lastGood = new Map(); // cache key -> last non-empty list, served while the feed fails
+  constructor(wire = newsWire) {
+    this.wire = wire;
   }
 
-  // One upstream request per list (not per page size), so the free Marketaux quota of about 100
-  // requests a day lasts. A failed or empty reply keeps serving the last good list and retries in 60 s.
-  async _list(key, load, ttl) {
-    const cached = cache.get(key);
-    if (cached) return cached;
-    const fresh = await load();
-    if (fresh.length) {
-      this.lastGood.set(key, fresh);
-      cache.set(key, fresh, ttl);
-      return fresh;
+  // category: 'all' or an event type; the other filters pass straight to the wire.
+  async getMarketNews({ category = 'all', limit = 30, symbol, kind, q, days = 2, materiality = 'medium' } = {}) {
+    const items = await this.wire.query({ type: category && category !== 'all' ? category : undefined, symbol, kind, q, days, limit, materiality });
+    return items.map(toArticle);
+  }
+
+  // A company's wire items over the last two weeks; NSE's live filing list fills in when the wire is thin.
+  async getStockNews(symbol, { limit = 6 } = {}) {
+    const clean = String(symbol || '').toUpperCase().replace(/^(NSE|BSE):/, '');
+    const items = (await this.wire.query({ symbol: clean, days: 14, limit, materiality: 'low' })).map(toArticle);
+    if (items.length >= limit) return items;
+    try {
+      const filings = await liveFilings(clean, { nse: nseClient, days: 14, limit });
+      for (const f of filings) {
+        if (items.some((a) => a.sourceUrl && a.sourceUrl === f.url)) continue;
+        items.push({ id: `nse-live-${clean}-${f.time}`, title: f.text || f.category, summary: f.category, source: 'NSE filing', sourceUrl: f.url,
+          publishedAt: new Date(f.time).toISOString(), category: f.category, eventType: 'other', kind: 'filing', materiality: 'medium',
+          companies: [{ symbol: clean, name: clean }], relatedSymbols: [`NSE:${clean}`] });
+      }
+    } catch (err) {
+      logger.debug({ err: err.message, symbol: clean }, 'Live NSE filings unavailable for stock news');
     }
-    const kept = this.lastGood.get(key) || [];
-    cache.set(key, kept, 60);
-    return kept;
+    return items.sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)).slice(0, limit);
   }
 
-  async getMarketNews(options = {}) {
-    const category = options.category || 'all';
-    const limit = options.limit || 30;
-    const articles = await this._list(`news:market:${category}`, () => this.provider.getMarketNews({ category, limit: MARKET_FETCH }), 600);
-    return articles.slice(0, limit);
-  }
-
-  async getStockNews(symbol, options = {}) {
-    const limit = options.limit || 6;
-    const cleanSym = (symbol || '').toUpperCase();
-    const articles = await this._list(`news:stock:${cleanSym}`, () => this.provider.getStockNews(cleanSym, { limit: STOCK_FETCH }), 1800);
-    return articles.slice(0, limit);
+  async getPulse() {
+    return this.wire.pulse();
   }
 }
 
