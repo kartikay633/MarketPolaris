@@ -8,15 +8,24 @@ $py = Join-Path $root '.venv-pulse\Scripts\python.exe'
 $log = Join-Path $root 'data\pulse-wide\run.log'
 (Get-Process -Id $PID).PriorityClass = 'BelowNormal'
 
-# v4's nightly job (22:00, Mon-Fri) has priority: training waits for it rather than competing for memory.
+# v4's nightly job (22:00, Mon-Fri) has priority. Training is long and memory-hungry, so on a weekday
+# evening it starts only after that job (22:40 at the earliest), and never while it runs.
 function WaitForNightlyJob {
   while ($true) {
-    $t = (Get-Date).TimeOfDay
-    $window = $t -ge [TimeSpan]'21:50' -and $t -le [TimeSpan]'22:40'
+    $now = Get-Date
+    $weekday = $now.DayOfWeek -notin 'Saturday', 'Sunday'
+    $beforeJob = $weekday -and $now.TimeOfDay -ge [TimeSpan]'17:00' -and $now.TimeOfDay -lt [TimeSpan]'22:40'
     $running = Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -match 'pulse-daily' }
-    if (-not $window -and -not $running) { return }
+    if (-not $beforeJob -and -not $running) { return }
     Start-Sleep -Seconds 60
   }
+}
+
+# A board-meeting collection already finished (or still running from an earlier start) is not repeated.
+function BoardMeetingsDone {
+  $status = Join-Path $root 'data\pulse-wide\news-history\status.json'
+  while (Get-CimInstance Win32_Process -Filter "Name='python.exe'" | Where-Object { $_.CommandLine -match 'news_history' -and $_.CommandLine -match 'pulse-wide' }) { Start-Sleep -Seconds 30 }
+  (Test-Path $status) -and ((Get-Content $status -Raw | ConvertFrom-Json).finishedAt)
 }
 
 function Step($name, [string[]]$arguments) {
@@ -27,7 +36,7 @@ function Step($name, [string[]]$arguments) {
   Add-Content $log "[$(Get-Date -Format s)] < $name ok"
 }
 
-Step 'board meetings' @('-m', 'ml.news_history', 'collect', '--data-dir', 'data/pulse-wide', '--only', 'board-meetings')
+if (-not (BoardMeetingsDone)) { Step 'board meetings' @('-m', 'ml.news_history', 'collect', '--data-dir', 'data/pulse-wide', '--only', 'board-meetings') }
 Step 'rank train' @('-m', 'ml.rank', 'train', '--data-dir', 'data/pulse-wide')
 Step 'risk train' @('-m', 'ml.risk', 'train', '--data-dir', 'data/pulse-wide')
 Step 'gates' @('-m', 'ml.wide_compare', '--core', 'data/pulse', '--wide', 'data/pulse-wide')
