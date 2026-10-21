@@ -160,7 +160,7 @@ export function FloatingAIWidget() {
                   </span>
                 </div>
                 <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                  Institutional Equity Synthesizer
+                  Polaris AI
                 </span>
               </div>
             </div>
@@ -209,7 +209,7 @@ export function FloatingAIWidget() {
                     How can Polaris AI assist your portfolio?
                   </div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Ask about NSE / BSE tickers, volatility regimes, or institutional flow.
+                    Ask about a covered NSE stock, its risk outlook or today’s market.
                   </div>
                 </div>
 
@@ -219,7 +219,7 @@ export function FloatingAIWidget() {
                   </span>
                   {[
                     'Analyze NIFTY 50 market breadth & regime',
-                    'Key institutional triggers for RELIANCE',
+                    'What is the risk outlook for RELIANCE?',
                     'High momentum banking stocks today',
                   ].map((p) => (
                     <button

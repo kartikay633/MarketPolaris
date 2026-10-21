@@ -51,7 +51,14 @@ export default function StockChart({
   const { theme } = useThemeStore();
   const isLight = theme === 'light';
 
-  const [chartType, setChartType] = useState('candlestick');
+  // Starts in the style chosen under Settings → Default chart style.
+  const [chartType, setChartType] = useState(() => {
+    try {
+      return { Candles: 'candlestick', Area: 'area', Line: 'line' }[localStorage.getItem('mp_default_chart')] || 'candlestick';
+    } catch {
+      return 'candlestick';
+    }
+  });
   const [hoverData, setHoverData] = useState(null);
 
   // Fallback to latest candle if not hovering

@@ -32,17 +32,17 @@ export default function NewsPage() {
                 Financial News Wire
               </h1>
               <span className="badge badge--accent">
-                LIVE TELEMETRY
+                MARKETAUX FEED
               </span>
             </div>
             <p className="page-subtitle">
-              Real-time Indian market disclosures, macroeconomic policy feeds, and corporate announcements.
+              Indian market and company news from the Marketaux feed, refreshed every few minutes.
             </p>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: 'var(--text-muted)' }}>
             <Globe size={13} color="var(--accent)" />
-            <span>Marketaux Wire & Verified Indian Exchanges</span>
+            <span>Source: Marketaux</span>
           </div>
         </div>
 

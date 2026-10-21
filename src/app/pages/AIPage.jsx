@@ -42,7 +42,7 @@ export default function AIPage() {
   const [chatNotice, setChatNotice] = useState('');
   const [retryPayload, setRetryPayload] = useState(null);
   const searchRef = useRef(null), inputRef = useRef(null), endRef = useRef(null), pendingRef = useRef(false), initialQueryRef = useRef(''), controllerRef = useRef(null);
-  const status = useQuery({ queryKey: ['pulse-research-status'], queryFn: async ({ signal }) => (await api.get('/research/status', { signal })).data, staleTime: 30000, refetchInterval: 60000, retry: 1 });
+  const status = useQuery({ queryKey: ['pulse-research-status'], queryFn: async ({ signal }) => (await api.get('/research/status', { signal, params: { view: 'page' } })).data, staleTime: 30000, refetchInterval: 60000, retry: 1 });
   const portfolio = usePortfolio();
   const data = status.data, instruments = data?.collection?.instruments || [], stocks = instruments.filter(i => !i.benchmark);
   const predictions = (data?.predictions?.predictions || []).filter(p => p.horizon === horizon);
