@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateChat, validateInterpretation, isStale, researchChat, researchStatus, allowedNumbers, numbersSupported } from '../server/research/service.js';
+import { validateChat, validateInterpretation, isStale, researchChat, researchStatus, allowedNumbers, numbersSupported, mentionedListedSymbol } from '../server/research/service.js';
+import { priceHistoryFacts } from '../server/research/stockFacts.js';
 import { mkdtemp, writeFile, mkdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -117,4 +118,47 @@ test('forward scores are exposed only for the current model version',async t=>{
   assert.equal(forwardTest.rank.modelVersion,'rank-now');
   assert.equal(forwardTest.risk,null);
   assert.equal(forwardTest.minimumMaturedSessions,20);
+});
+
+test('any listed NSE stock is recognised: a capitalised symbol, the full name, or a distinctive first word', () => {
+  const equities = {
+    SUZLON: { name: 'SUZLON ENERGY LIMITED', alias: 'Suzlon Energy' },
+    ADANIENT: { name: 'ADANI ENTERPRISES LIMITED' }, ADANIPORTS: { name: 'ADANI PORT & SEZ LTD' },
+    IDEA: { name: 'VODAFONE IDEA LIMITED', alias: 'Vodafone Idea' },
+  };
+  assert.equal(mentionedListedSymbol('why did suzlon fall today?', equities), 'SUZLON');
+  assert.equal(mentionedListedSymbol('How is SUZLON doing', equities), 'SUZLON');
+  assert.equal(mentionedListedSymbol('tell me about adani enterprises', equities), 'ADANIENT');
+  assert.equal(mentionedListedSymbol('is adani good?', equities), null, 'an ambiguous group name is not guessed');
+  assert.equal(mentionedListedSymbol('a good idea for beginners?', equities), null, 'a lowercase common word is not a ticker');
+  assert.equal(mentionedListedSymbol('vodafone idea results', equities), 'IDEA');
+});
+
+test('price history facts come straight from the candles', () => {
+  const day = 86400;
+  const candles = Array.from({ length: 260 }, (_, i) => ({ time: 1700000000 + i * day, open: 100 + i, high: 101 + i, low: 99 + i, close: 100 + i, volume: 1e6 }));
+  const f = priceHistoryFacts(candles);
+  assert.equal(f.lastClose, 359);
+  assert.equal(f.high52Week, 360);
+  assert.equal(f.return1Month, Number((359 / 338 - 1).toFixed(4)));
+  assert.ok(f.averageDailyTradedValueCrore20Day > 30 && f.averageDailyTradedValueCrore20Day < 40);
+  assert.equal(priceHistoryFacts(candles.slice(0, 5)), null);
+});
+
+test('a stock outside the models gets price, filing and news facts, and is marked as having no forecast', async t => {
+  const dataDir = await sandbox(t);
+  const day = 86400;
+  const candles = Array.from({ length: 260 }, (_, i) => ({ time: 1700000000 + i * day, open: 40, high: 41, low: 39, close: 40 + (i % 3), volume: 5e6 }));
+  const result = await researchChat({ message: 'why did suzlon fall today?', horizon: 5 }, {
+    dataDir, quote: async () => ({ source: 'live', ltp: 39.4, changePercent: -2.43, previousClose: 40.38, high: 40.34, low: 38.77, marketStatus: 'OPEN' }),
+    nifty: async () => null, sleep: async () => {},
+    listed: async () => ({ SUZLON: { name: 'SUZLON ENERGY LIMITED' } }),
+    history: async () => candles,
+    filingsLive: async () => [{ category: 'Press Release', text: 'Order win', time: Date.parse('2026-10-20T10:00:00Z'), url: 'https://nse/x.pdf' }],
+    headlines: async () => [{ title: 'Suzlon wins order', source: 'example.com', sourceUrl: 'https://example.com/a', publishedAt: '2026-10-20T08:00:00Z' }],
+  });
+  const types = new Set(result.evidence.map(e => e.type));
+  for (const type of ['live_quote', 'price_history', 'company_filing', 'news_headline', 'coverage']) assert.ok(types.has(type), type);
+  assert.equal(result.evidence.find(e => e.type === 'coverage').data.modelForecasts, 'not available');
+  assert.match(result.reply, /no ranking or volatility forecast/);
 });

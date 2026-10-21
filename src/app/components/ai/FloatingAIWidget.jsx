@@ -209,7 +209,7 @@ export function FloatingAIWidget() {
                     How can Polaris AI assist your portfolio?
                   </div>
                   <div style={{ fontSize: '11.5px', color: 'var(--text-muted)', marginTop: '4px' }}>
-                    Ask about a covered NSE stock, its risk outlook or today’s market.
+                    Ask about any NSE stock, a covered stock’s risk outlook, or today’s market.
                   </div>
                 </div>
 
