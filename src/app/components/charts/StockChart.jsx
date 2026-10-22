@@ -229,7 +229,8 @@ export default function StockChart({
   useEffect(() => {
     const chart = chartInstanceRef.current, mainSeries = mainSeriesRef.current, volumeSeries = volumeSeriesRef.current;
     if (!chart || !mainSeries || !volumeSeries) return;
-    const sorted = [...(candles || [])].sort((a, b) => a.time - b.time);
+    // The chart library rejects repeated timestamps, so keep one candle per time (the last one given).
+    const sorted = [...new Map((candles || []).map((c) => [c.time, c])).values()].sort((a, b) => a.time - b.time);
     const prev = loadedRef.current;
     const view = `${symbol}|${selectedTimeframe}|${chartType}`;
     const range = chart.timeScale().getVisibleLogicalRange();

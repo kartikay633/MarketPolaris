@@ -62,7 +62,9 @@ function HeadToHead({ bots }) {
   const since = running.map(b => b.startAsOf).sort().at(-1);
   const rows = running.map(b => {
     const from = b.equity.find(e => e.date >= since);
-    return from ? { id: b.id, label: b.label, ret: b.value / from.value - 1, nifty: b.equity.at(-1)?.nifty && from.nifty ? b.equity.at(-1).nifty / from.nifty - 1 : null } : null;
+    // NIFTY now, matching the account's own valuation (live during the session, else the last close).
+    const niftyNow = Number.isFinite(b.niftyReturnPct) && b.equity[0]?.nifty ? b.equity[0].nifty * (1 + b.niftyReturnPct) : b.equity.at(-1)?.nifty;
+    return from ? { id: b.id, label: b.label, ret: b.value / from.value - 1, nifty: niftyNow && from.nifty ? niftyNow / from.nifty - 1 : null } : null;
   }).filter(Boolean);
   if (rows.length < 2) return null;
   const nifty = rows.find(r => Number.isFinite(r.nifty))?.nifty;

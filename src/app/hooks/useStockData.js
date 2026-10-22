@@ -50,7 +50,10 @@ export function useCandleHistory(symbol, interval = '1D') {
   const key = `${symbol}|${interval}`;
   const keyRef = useRef(key);
 
+  // Reset only when the symbol or interval changes. Resetting on mount as well would clear `busy` while a
+  // chart that mounted with cached data is already fetching an older page, so the page arrived twice.
   useEffect(() => {
+    if (keyRef.current === key) return;
     keyRef.current = key;
     setOlder([]);
     setExhausted(false);
@@ -58,11 +61,11 @@ export function useCandleHistory(symbol, interval = '1D') {
     setLoadingOlder(false);
   }, [key]);
 
+  // One candle per timestamp (the latest window wins), in time order, as the charts require.
   const candles = useMemo(() => {
     const base = latest.data || [];
     if (!older.length) return base;
-    const seen = new Set(base.map((c) => c.time));
-    return [...older.filter((c) => !seen.has(c.time)), ...base].sort((a, b) => a.time - b.time);
+    return [...new Map([...older, ...base].map((c) => [c.time, c])).values()].sort((a, b) => a.time - b.time);
   }, [latest.data, older]);
 
   const loadOlder = useCallback(async () => {

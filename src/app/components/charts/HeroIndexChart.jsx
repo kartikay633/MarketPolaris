@@ -68,7 +68,8 @@ export default function HeroIndexChart({ candles = [], previousClose, isOpen, on
   useEffect(() => {
     const chart = chartRef.current, series = seriesRef.current;
     if (!chart || !series) return;
-    const sorted = candles.filter((c) => Number.isFinite(c?.close)).sort((a, b) => a.time - b.time);
+    // The chart library rejects repeated timestamps, so keep one point per time (the last one given).
+    const sorted = [...new Map(candles.filter((c) => Number.isFinite(c?.close)).map((c) => [c.time, c])).values()].sort((a, b) => a.time - b.time);
     const range = chart.timeScale().getVisibleLogicalRange();
     const prev = loadedRef.current;
     series.setData(sorted.map((c) => ({ time: c.time, value: c.close })));
